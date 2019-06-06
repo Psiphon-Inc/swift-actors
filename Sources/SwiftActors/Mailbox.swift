@@ -30,9 +30,9 @@ public final class Mailbox<T> {
     var queue: Queue<T>
     var stopped: Bool
     
-    init(name: String) {
-        mailboxDispatch = DispatchQueue(label: "\(name)$mailbox", target: DispatchQueue.global())
-        queue = Queue(capacity: 5)
+    init(label: String) {
+        mailboxDispatch = DispatchQueue(label: "\(label)$mailbox", target: DispatchQueue.global())
+        queue = Queue()
         stopped = false
     }
     
@@ -43,20 +43,19 @@ public final class Mailbox<T> {
         }
     }
     
+    /// - Important: `notifyOwner` is not dispatched on `mailboxDispatch`.
     private func notifyOwner() {
-        mailboxDispatch.async {
-            if let owner = self.owner {
-                for _ in 0...self.queue.count {
-                    owner.newMessage()
-                }
+        if let owner = self.owner {
+            for _ in 0..<self.queue.count {
+                owner.newMessage()
             }
         }
     }
     
+    /// Enqueue is a blocking call for backpuressure support and better memory utilization.
     /// - Note: Messages are dropped after the mailbox is stopped.
     func enqueue(_ item: T) {
-        mailboxDispatch.async {
-            
+        mailboxDispatch.sync {
             if self.stopped {
                 // TODO: maybe send the message somewhere else.
                 return

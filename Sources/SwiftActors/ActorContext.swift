@@ -39,6 +39,8 @@ enum ActorState: Int, Ordinal {
 
 public protocol ActorContext: class {
     
+    var path: String { get }
+    
     var name: String { get }
     
     var parent: Actor? { get }
@@ -61,7 +63,7 @@ public protocol ActorContext: class {
     
     /// TODO: functions below are internal. Maybe create a separate internal context protocol.
     
-    func onChildStopped(child: Actor)
+    func onChildStopped(child: ActorContext)
     
     func enqueueMessage(message: MessageKind, from actor: Actor?)
     
@@ -69,32 +71,38 @@ public protocol ActorContext: class {
 
 public class LocalActorContext: ActorContext {
     
+    public let path: String
     public let name: String
-    public var parent: Actor?
     public var children: [String: Actor]
+    public unowned var parent: Actor?
     public unowned var system: ActorSystem
     
-    internal let mailbox: Mailbox<MessageContext>
-    internal let dispatch: PriorityDispatch
-    internal let waitGroup: DispatchGroup
-    internal var currentMessage: MessageContext?
-    internal var behavior: Behavior?
-    internal var state: ActorState
+    unowned var actor: Actor
     
-    var actor: Actor
+    let mailbox: Mailbox<MessageContext>
+    let dispatch: PriorityDispatch
+    let waitGroup: DispatchGroup
+    var currentMessage: MessageContext?
+    var behavior: Behavior!
+    var state: ActorState
     
-    init(name: String, system: ActorSystem, actor: Actor, parent: Actor? = nil) {
+    init(name: String, parentPath: String = "", system: ActorSystem, actor: Actor, parent: Actor? = nil) {
         self.name = name
+        if parentPath.isEmpty {
+            path = name
+        } else {
+            path = "\(parentPath).\(name)"
+        }
         self.system = system
         self.parent = parent
         self.actor = actor
-        dispatch = PriorityDispatch(name: name)
+        dispatch = PriorityDispatch(label: self.path)
         waitGroup = DispatchGroup()
         currentMessage = nil
         children = [String: Actor]()
         behavior = actor.receive
         state = .spawned
-        mailbox = Mailbox(name: name)
+        mailbox = Mailbox(label: name)
     }
     
     public func sender() -> Actor? {
@@ -127,15 +135,18 @@ public class LocalActorContext: ActorContext {
             // Stop the mailbox
             self.mailbox.stop()
             
-            self.children.forEach { (key: String, child: Actor) in
+            self.children.forEach { _, child in
                 self.waitGroup.enter()
                 child.stop()
             }
             
             self.waitGroup.notify(queue: self.dispatch.highPriorityDispatch) {
+                guard self.children.count == 0 else {
+                    preconditionFailure()
+                }
                 self.actor.postStop()
                 self.state = .stopped
-                self.parent?.context.onChildStopped(child: self.actor)
+                self.parent?.context.onChildStopped(child: self)
             }
         }
     }
@@ -151,7 +162,7 @@ public class LocalActorContext: ActorContext {
     }
     
     public func spawn<T>(name: String, actor childActor: T) -> T where T: Actor {
-        let childCtx = LocalActorContext(name: "\(self.name).\(name)", system: self.system, actor: childActor, parent: self.actor)
+        let childCtx = LocalActorContext(name: name, parentPath: self.path, system: self.system, actor: childActor, parent: self.actor)
         childActor.bind(context: childCtx)
         
         dispatch.asyncHighPriority {
@@ -163,7 +174,7 @@ public class LocalActorContext: ActorContext {
             
             // Checks if a child actor with the same name already exists before adding it.
             if self.children.keys.contains(name) {
-                preconditionFailure("child actor \(childCtx.name) is not unique")
+                preconditionFailure("child actor \(name) is not unique")
             }
             self.children[name] = childActor
             childActor.context.start()
@@ -182,9 +193,11 @@ public class LocalActorContext: ActorContext {
         mailbox.enqueue(msgContext)
     }
     
-    public func onChildStopped(child: Actor) {
+    public func onChildStopped(child: ActorContext) {
         dispatch.asyncHighPriority {
-            self.children.removeValue(forKey: child.name)
+            guard self.children.removeValue(forKey: child.name) != nil else {
+                preconditionFailure("child actor '\(child.name)' does not exist")
+            }
             if self.state == .stopping {
                 self.waitGroup.leave()
             }
@@ -195,9 +208,7 @@ public class LocalActorContext: ActorContext {
 extension LocalActorContext: MailboxOwner {
     
     public func newMessage() {
-        
         dispatch.async {
-            
             guard self.state == .started else {
                 return
             }
@@ -242,5 +253,6 @@ extension LocalActorContext: MailboxOwner {
                 }
             }
         }
-    }    
+    }
+    
 }

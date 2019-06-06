@@ -1,153 +1,60 @@
-//
-//  Queue.swift
-//  Platform
-//
-//  Created by Krunoslav Zaher on 3/21/15.
-//  Copyright © 2015 Krunoslav Zaher. All rights reserved.
-//
+// Source: https://github.com/raywenderlich/swift-algorithm-club/blob/master/Queue/Queue-Optimized.swift
+// Copyright (c) 2016 Matthijs Hollemans and contributors
 
-/**
- Data structure that represents queue.
- 
- Complexity of `enqueue`, `dequeue` is O(1) when number of operations is
- averaged over N operations.
- 
- Complexity of `peek` is O(1).
- */
-struct Queue<T>: Sequence {
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+public struct Queue<T> {
+    fileprivate var array = [T?]()
+    fileprivate var head = 0
     
-    /// Type of generator.
-    typealias Generator = AnyIterator<T>
-    
-    private let _resizeFactor = 2
-    
-    private var _storage: ContiguousArray<T?>
-    private var _count = 0
-    private var _pushNextIndex = 0
-    private let _initialCapacity: Int
-    
-    /**
-     Creates new queue.
-     
-     - parameter capacity: Capacity of newly created queue.
-     */
-    init(capacity: Int) {
-        _initialCapacity = capacity
-        
-        _storage = ContiguousArray<T?>(repeating: nil, count: capacity)
-    }
-    
-    private var dequeueIndex: Int {
-        let index = _pushNextIndex - count
-        return index < 0 ? index + _storage.count : index
-    }
-    
-    /// - returns: Is queue empty.
-    var isEmpty: Bool {
+    public var isEmpty: Bool {
         return count == 0
     }
     
-    /// - returns: Number of elements inside queue.
-    var count: Int {
-        return _count
+    public var count: Int {
+        return array.count - head
     }
     
-    /// - returns: Element in front of a list of elements to `dequeue`.
-    func peek() -> T {
-        precondition(count > 0)
-        
-        return _storage[dequeueIndex]!
+    public mutating func enqueue(_ element: T) {
+        array.append(element)
     }
     
-    mutating private func resizeTo(_ size: Int) {
-        var newStorage = ContiguousArray<T?>(repeating: nil, count: size)
+    public mutating func dequeue() -> T? {
+        guard head < array.count, let element = array[head] else { return nil }
         
-        let count = _count
+        array[head] = nil
+        head += 1
         
-        let dequeueIndex = self.dequeueIndex
-        let spaceToEndOfQueue = _storage.count - dequeueIndex
-        
-        // first batch is from dequeue index to end of array
-        let countElementsInFirstBatch = Swift.min(count, spaceToEndOfQueue)
-        // second batch is wrapped from start of array to end of queue
-        let numberOfElementsInSecondBatch = count - countElementsInFirstBatch
-        
-        newStorage[0 ..< countElementsInFirstBatch] = _storage[dequeueIndex ..< (dequeueIndex + countElementsInFirstBatch)]
-        newStorage[countElementsInFirstBatch ..< (countElementsInFirstBatch + numberOfElementsInSecondBatch)] = _storage[0 ..< numberOfElementsInSecondBatch]
-        
-        _count = count
-        _pushNextIndex = count
-        _storage = newStorage
-    }
-    
-    /// Enqueues `element`.
-    ///
-    /// - parameter element: Element to enqueue.
-    mutating func enqueue(_ element: T) {
-        if count == _storage.count {
-            resizeTo(Swift.max(_storage.count, 1) * _resizeFactor)
+        let percentage = Double(head)/Double(array.count)
+        if array.count > 50 && percentage > 0.25 {
+            array.removeFirst(head)
+            head = 0
         }
         
-        _storage[_pushNextIndex] = element
-        _pushNextIndex += 1
-        _count += 1
-        
-        if _pushNextIndex >= _storage.count {
-            _pushNextIndex -= _storage.count
-        }
+        return element
     }
     
-    private mutating func dequeueElementOnly() -> T {
-        precondition(count > 0)
-        
-        let index = dequeueIndex
-        
-        defer {
-            _storage[index] = nil
-            _count -= 1
-        }
-        
-        return _storage[index]!
-    }
-    
-    /// Dequeues element or throws an exception in case queue is empty.
-    ///
-    /// - returns: Dequeued element.
-    mutating func dequeue() -> T? {
-        if self.count == 0 {
+    public var front: T? {
+        if isEmpty {
             return nil
-        }
-        
-        defer {
-            let downsizeLimit = _storage.count / (_resizeFactor * _resizeFactor)
-            if _count < downsizeLimit && downsizeLimit >= _initialCapacity {
-                resizeTo(_storage.count / _resizeFactor)
-            }
-        }
-        
-        return dequeueElementOnly()
-    }
-    
-    /// - returns: Generator of contained elements.
-    func makeIterator() -> AnyIterator<T> {
-        var i = dequeueIndex
-        var count = _count
-        
-        return AnyIterator {
-            if count == 0 {
-                return nil
-            }
-            
-            defer {
-                count -= 1
-                i += 1
-            }
-            
-            if i >= self._storage.count {
-                i -= self._storage.count
-            }
-            
-            return self._storage[i]
+        } else {
+            return array[head]
         }
     }
 }

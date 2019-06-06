@@ -28,7 +28,7 @@ class EchoActor: Actor {
     
     var context: ActorContext!
     
-    lazy var receive: Behavior = { msg -> Receive in
+    lazy var receive: Behavior = { [unowned self] msg -> Receive in
         switch msg {
         case let msg as String:
             self.context.sender()!.tell(message: msg)
@@ -47,4 +47,5 @@ class EchoActor: Actor {
         
         return .same
     }
+    
 }

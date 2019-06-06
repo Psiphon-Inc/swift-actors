@@ -21,12 +21,12 @@ import Foundation
 
 public final class PriorityDispatch {
     
-    internal let defaultPriorityDispatch: DispatchQueue
-    internal let highPriorityDispatch: DispatchQueue
+    let defaultPriorityDispatch: DispatchQueue
+    let highPriorityDispatch: DispatchQueue
     
-    init(name: String) {
-        highPriorityDispatch = DispatchQueue(label: "\(name)$high", target: DispatchQueue.global())
-        defaultPriorityDispatch = DispatchQueue(label: name, target: highPriorityDispatch)
+    init(label: String) {
+        highPriorityDispatch = DispatchQueue(label: "\(label)$high", target: DispatchQueue.global())
+        defaultPriorityDispatch = DispatchQueue(label: label, target: highPriorityDispatch)
     }
     
     /// Executes `work` with default priority.
