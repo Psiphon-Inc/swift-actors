@@ -21,20 +21,32 @@ import Foundation
 
 public final class PriorityDispatch {
     
-    internal let defaultPriorityDispatch: DispatchQueue
-    internal let highPriorityDispatch: DispatchQueue
+    let defaultPriorityDispatch: DispatchQueue
+    let highPriorityDispatch: DispatchQueue
     
-    init(name: String) {
-        highPriorityDispatch = DispatchQueue(label: "\(name)$high", target: DispatchQueue.global())
-        defaultPriorityDispatch = DispatchQueue(label: name, target: highPriorityDispatch)
+    init(label: String) {
+        highPriorityDispatch = DispatchQueue(label: "\(label)$high", target: DispatchQueue.global())
+        defaultPriorityDispatch = DispatchQueue(label: label, target: highPriorityDispatch)
     }
     
-    /// Executes `work` with default priority.
+    /// Pauses default priority queue, and synchronously executes `work` on high priority queue
+    /// before resuming default priority queue.
+    func syncHighPriority<T>(execute work: () -> T) -> T {
+        defaultPriorityDispatch.suspend()
+        return highPriorityDispatch.sync {
+            let result = work()
+            self.defaultPriorityDispatch.resume()
+            return result
+        }
+    }
+    
+    /// Executes `work` asynchronously with default priority.
     func async(_ work: @escaping () -> Void) {
         defaultPriorityDispatch.async(execute: work)
     }
     
-    /// Pauses default priority queue, and executes high priority queue before resuming default priority queue.
+    /// Pauses default priority queue, and asynchronously executes `work` on high priority queue
+    /// before resuming default priority queue.
     func asyncHighPriority(_ work: @escaping () -> Void) {
         defaultPriorityDispatch.suspend()
         highPriorityDispatch.async {

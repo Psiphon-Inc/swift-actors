@@ -30,7 +30,7 @@ public typealias ContextBehavior = (AnyMessage, Actor) throws -> Receive
 
 public class BehaviorActor: Actor {
     public var context: ActorContext!
-    public lazy var receive: Behavior = { msg throws -> Receive in
+    public lazy var receive: Behavior = { [unowned self] msg throws -> Receive in
         return try self.contextBehavior(msg, self)
     }
     

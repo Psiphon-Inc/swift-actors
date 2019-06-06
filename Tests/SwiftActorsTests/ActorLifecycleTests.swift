@@ -47,8 +47,8 @@ class ActorLifecycleTests: XCTestCase {
             var context: ActorContext!
             var expectations: [XCTestExpectation]
             
-            lazy var receive: Behavior = { msg -> Receive in
-                
+            lazy var receive: Behavior = { [unowned self] msg -> Receive in
+
                 if let i = msg as? Int {
                     self.expectations[i].fulfill()
                 }
@@ -81,7 +81,7 @@ class ActorLifecycleTests: XCTestCase {
             var context: ActorContext!
             let expect: XCTestExpectation
             
-            lazy var receive: Behavior = { msg in
+            lazy var receive: Behavior = { [unowned self] msg -> Receive in
                 self.expect.fulfill()
                 return .same
             }
@@ -111,7 +111,7 @@ class ActorLifecycleTests: XCTestCase {
             var preStartValue: String = "notStarted"
             let expect: XCTestExpectation
             
-            lazy var receive: Behavior = { msg in
+            lazy var receive: Behavior = { [unowned self] msg -> Receive in
                 return .same
             }
             
@@ -160,7 +160,7 @@ class ActorLifecycleTests: XCTestCase {
                 preStartExpect = preStart
             }
             
-            lazy var receive: Behavior = { msg in
+            lazy var receive: Behavior = { [unowned self] msg -> Receive in
                 return .same
             }
             
@@ -217,6 +217,7 @@ class ActorLifecycleTests: XCTestCase {
         // Arrange
         enum Action: AnyMessage {
             case increment
+            case shouldNotProcess
             case stop
             case contextStop
         }
@@ -225,7 +226,10 @@ class ActorLifecycleTests: XCTestCase {
             var context: ActorContext!
             var counter: Int = 0
             
-            lazy var receive: Behavior = { msg -> Receive in
+            lazy var receive: Behavior = { [unowned self] msg -> Receive in
+                
+                XCTAssert((self.context as! LocalActorContext).state == .started)
+                
                 guard let msg = msg as? Action else {
                     XCTFail()
                     return .same
@@ -234,13 +238,14 @@ class ActorLifecycleTests: XCTestCase {
                 switch msg {
                 case .increment:
                     self.counter += 1
-                    return .same
+                case .shouldNotProcess:
+                    XCTFail()
                 case .stop:
                     return .stop
                 case .contextStop:
                     self.stop()
-                    return .same
                 }
+                return .same
             }
         }
         
@@ -263,8 +268,8 @@ class ActorLifecycleTests: XCTestCase {
             }
             
             // These messages should not be processed
-            for _ in 1...10 {
-                actor ! Action.increment
+            for _ in 1...1000 {
+                actor ! Action.shouldNotProcess
             }
 
             // wait (TODO: once actor watcher is implemented, this needs to be removed)
@@ -281,9 +286,6 @@ class ActorLifecycleTests: XCTestCase {
             // Test specific assertions.
             switch testNum {
             case 1, 2:
-                let mailboxCount = actorContext.mailbox.count()
-                // Last 10 messages should not be dequeued.
-                XCTAssert(mailboxCount == 10, "count is \(mailboxCount) - test \(testNum)")
                 XCTAssert(actorContext.mailbox.stopped == true)
                 XCTAssert(actor.counter == 1, "actor counter is \(actor.counter) - test \(testNum)")
             default: break

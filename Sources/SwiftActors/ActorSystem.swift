@@ -20,35 +20,42 @@
 import Foundation
 
 class RootActor: Actor {
-    
     var context: ActorContext!
     
-    var receive: Behavior = { msg throws -> Receive in
-        // Do nothing for now.
-        return Receive.same
+    var stopGroup: DispatchGroup?
+    
+    lazy var receive: Behavior = { [unowned self] msg -> Receive in
+        return .same
+    }
+    
+    func stop(inGroup: DispatchGroup) {
+        stopGroup = inGroup
+        stopGroup?.enter()
+        stop()
+    }
+    
+    func postStop() {
+        stopGroup?.leave()
     }
     
 }
 
+/// ActorSystem
 public class ActorSystem {
     
     let name: String
-    private let root: Actor!
+    private var root: RootActor!
     private let dispatch: DispatchQueue
     private var uid = UInt32(0)
     
-    public init(name: String, root: Actor) {
-        dispatch = DispatchQueue(label: "\(name)$dispatch", target: DispatchQueue.global())
-        self.name = name
-        self.root = root
-        self.root.bind(context: LocalActorContext(name: name, system: self, actor: root))
-        self.root.context.start()
-    }
-    
     /// A reverse-DNS naming style (e.g. "com.example") is recommended. All actors within this
     /// actor system will be prefixed with this label.
-    public convenience init(name: String) {
-        self.init(name: name, root: RootActor())
+    public init(name: String) {
+        dispatch = DispatchQueue(label: "\(name)$dispatch", target: DispatchQueue.global())
+        self.name = name
+        self.root = RootActor()
+        self.root.bind(context: LocalActorContext(name: name, parentPath: "", system: self, actor: root))
+        self.root.context.start()
     }
     
     @discardableResult
@@ -56,8 +63,11 @@ public class ActorSystem {
         return root.context.spawn(name: name, actor: actor)
     }
     
+    /// Stop blocks until all actors in the sytem have stopped.
     public func stop() {
-        root.stop()
+        let stopGroup = DispatchGroup()
+        root.stop(inGroup: stopGroup)
+        stopGroup.wait()
     }
     
     public func newActorUID() -> UInt32 {
@@ -66,4 +76,5 @@ public class ActorSystem {
             return uid
         }
     }
+    
 }

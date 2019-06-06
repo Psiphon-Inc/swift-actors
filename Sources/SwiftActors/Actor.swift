@@ -33,7 +33,8 @@ public protocol Actor: class {
     var context: ActorContext! { get set }
     
     var receive: Behavior { get }
-    
+    //    func receive(_ msg: AnyMessage) throws -> Receive
+
     /// Lifecycle method called before actor starts processing messages.
     func preStart()
     
