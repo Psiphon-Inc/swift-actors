@@ -23,14 +23,17 @@ import XCTest
 class ActorHierarchyTests: XCTestCase {
     
     var system: ActorSystem!
+    var echo: EchoActor!
     
     override func setUp() {
-        system = ActorSystem(name: "system", root: EchoActor())
+        system = ActorSystem(name: "system")
+        echo = system.spawn(name: "echo", actor: EchoActor())
     }
     
     override func tearDown() {
         system.stop()
         system = nil
+        echo = nil
     }
     
     /// Tests adding one child to the root, and sending parent a message.
@@ -44,7 +47,7 @@ class ActorHierarchyTests: XCTestCase {
             
             let expects: [XCTestExpectation]
             
-            lazy var receive: Behavior = { msg -> Receive in
+            lazy var receive: Behavior = { [unowned self] msg -> Receive in
                 if let msg = msg as? String {
                     if msg == "ping" {
                         self.expects[0].fulfill()
@@ -69,9 +72,9 @@ class ActorHierarchyTests: XCTestCase {
         }
         
         // Act
-        let echo = system.spawn(name: "child", actor: ParentForwardActor(expects))
-        echo ! "ping"
-        echo ! "pingParent"
+        let forwardActor = echo.spawn(name: "child", actor: ParentForwardActor(expects))
+        forwardActor ! "ping"
+        forwardActor ! "pingParent"
         
         // Assert
         wait(for: expects, timeout: 1, enforceOrder: true)
@@ -83,7 +86,7 @@ class ActorHierarchyTests: XCTestCase {
             var context: ActorContext!
             let expect: XCTestExpectation
             
-            lazy var receive: Behavior = { msg -> Receive in
+            lazy var receive: Behavior = { [unowned self] msg -> Receive in
                 guard let msg = msg as? String else {
                     XCTFail()
                     return .same
@@ -111,7 +114,7 @@ class ActorHierarchyTests: XCTestCase {
         class PingActor: Actor {
             var context: ActorContext!
             
-            lazy var receive: Behavior = { msg -> Receive in
+            lazy var receive: Behavior = { [unowned self] msg -> Receive in
                 guard let sender = self.context.sender() else {
                     XCTFail()
                     return .same
@@ -128,7 +131,7 @@ class ActorHierarchyTests: XCTestCase {
         let expect = expectation(description: "pingBack")
         
         // Act
-        let parent = system.spawn(name: "parent", actor: PingerActor(expect))
+        let parent = echo.spawn(name: "parent", actor: PingerActor(expect))
         parent ! "createChild"
         parent ! "pingChild"
         
@@ -155,7 +158,7 @@ class ActorHierarchyTests: XCTestCase {
                 startExpect = start
             }
             
-            lazy var receive: Behavior = { msg -> Receive in
+            lazy var receive: Behavior = { [unowned self] msg -> Receive in
                 guard let msg = msg as? Message else {
                     XCTFail()
                     return .same
@@ -182,7 +185,7 @@ class ActorHierarchyTests: XCTestCase {
         let subchildExpect = expectation(description: "subchildStart")
         
         // Act
-        let parent = system.spawn(name: "parent", actor: TestActor(start: parentExpect))
+        let parent = echo.spawn(name: "parent", actor: TestActor(start: parentExpect))
         parent ! Message.addChild(name: "child", actor: TestActor(start: childExpect))
         parent ! Message.passChild(name: "subchild", actor: TestActor(start: subchildExpect))
         
@@ -211,7 +214,7 @@ class ActorHierarchyTests: XCTestCase {
                 stopExpect = stop
             }
             
-            lazy var receive: Behavior = { msg -> Receive in
+            lazy var receive: Behavior = { [unowned self] msg -> Receive in
                 guard let msg = msg as? Message else {
                     XCTFail()
                     return .same
@@ -244,7 +247,7 @@ class ActorHierarchyTests: XCTestCase {
         let childStopExpect = expectation(description: "childStop")
         let subchildStopExpect = expectation(description: "subchildStop")
         
-        let parent = system.spawn(name: "parent", actor: TestActor(start: parentStartExpect, stop: parentStopExpect))
+        let parent = echo.spawn(name: "parent", actor: TestActor(start: parentStartExpect, stop: parentStopExpect))
         parent ! Message.addChild(name: "child",
                                   actor: TestActor(start: childStartExpect, stop: childStopExpect))
         parent ! Message.passChild(name: "subchild",

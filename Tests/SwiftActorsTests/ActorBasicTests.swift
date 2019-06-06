@@ -25,8 +25,8 @@ extension XCTestExpectation: AnyMessage {}
 class NoOpActor: Actor {
     var context: ActorContext!
     
-    lazy var receive: Behavior = {
-        guard let msg = $0 as? XCTestExpectation else {
+    lazy var receive: Behavior = { [unowned self] msg -> Receive in
+        guard let msg = msg as? XCTestExpectation else {
             XCTFail()
             return .same
         }
@@ -48,6 +48,7 @@ final class ActorBasicTests: XCTestCase {
         system.stop()
         system = nil
     }
+
     
     func testOneMessageSend() {
         // Arrange
@@ -89,8 +90,8 @@ final class ActorBasicTests: XCTestCase {
             
             var context: ActorContext!
             
-            lazy var receive: Behavior = {
-                switch $0 as! Forwarding {
+            lazy var receive: Behavior = { [unowned self] msg -> Receive in
+                switch msg as! Forwarding {
                 case .forward(to: let noopActor):
                     self.forwardExpect.fulfill()
                     noopActor.tell(message: self.noopExpect)
@@ -136,7 +137,7 @@ final class ActorBasicTests: XCTestCase {
         class Switcher: Actor {
             var context: ActorContext!
             
-            lazy var behaviorA: Behavior = { msg -> Receive in
+            lazy var behaviorA: Behavior = { [unowned self] msg -> Receive in
 
                 guard let sender = self.context.sender() else {
                     XCTFail()
@@ -158,7 +159,7 @@ final class ActorBasicTests: XCTestCase {
                 }
             }
             
-            lazy var behaviorB: Behavior = { msg -> Receive in
+            lazy var behaviorB: Behavior = { [unowned self] msg -> Receive in
                 
                 guard let sender = self.context.sender() else {
                     XCTFail()
@@ -254,7 +255,7 @@ final class ActorBasicTests: XCTestCase {
         // Arrange
         class TestActor: Actor {
             var context: ActorContext!
-            lazy var child = context.spawn(name: "echo", actor: EchoActor())
+            lazy var child: EchoActor! = context.spawn(name: "echo", actor: EchoActor())
             
             let expect: XCTestExpectation
             
@@ -262,8 +263,8 @@ final class ActorBasicTests: XCTestCase {
                 expect = e
             }
             
-            lazy var receive: Behavior = {
-                guard let msg = $0 as? String else {
+            lazy var receive: Behavior = { [unowned self] msg -> Receive in
+                guard let msg = msg as? String else {
                     XCTFail()
                     return .same
                 }
@@ -276,6 +277,11 @@ final class ActorBasicTests: XCTestCase {
                 }
                 return .same
             }
+            
+            func postStop() {
+                child = nil
+            }
+            
         }
         
         let expect = expectation(description: "message back from child")
@@ -306,7 +312,7 @@ final class ActorBasicTests: XCTestCase {
                 done = e
             }
             
-            lazy var receive: Behavior = { msg in
+            lazy var receive: Behavior = { [unowned self] msg -> Receive in
                 switch msg {
                 case is SetTo10:
                     self.result = 10

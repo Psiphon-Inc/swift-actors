@@ -51,8 +51,8 @@ class ActorPerfTests: XCTestCase {
             let expects: [XCTestExpectation]
             var context: ActorContext!
             
-            lazy var receive: Behavior = {
-                guard let msg = $0 as? Int else {
+            lazy var receive: Behavior = { [unowned self] msg -> Receive in
+                guard let msg = msg as? Int else {
                     XCTFail()
                     return .same
                 }
@@ -85,7 +85,49 @@ class ActorPerfTests: XCTestCase {
             wait(for: [expects[i]], timeout: 1)  // Assert
             i += 1
         }
-        
     }
-
+    
+    func testMessageSendPerf2() {
+        // Arrange
+        enum Action: AnyMessage {
+            case reset
+            case increment
+            case done(XCTestExpectation)
+        }
+        class MultipleMsg: Actor {
+            var context: ActorContext!
+            var count = 0
+            
+            lazy var receive: Behavior = { [unowned self] msg -> Receive in
+                switch msg as! Action {
+                case .reset:
+                    self.count = 0
+                case .increment:
+                    self.count += 1
+                case .done(let expect):
+                    expect.fulfill()
+                }
+                return .same
+            }
+        }
+        
+        // Act
+        let actor = system.spawn(name: "multiple", actor: MultipleMsg())
+        
+        self.measure {
+            let count =  1000
+            
+            actor ! Action.reset
+            for _ in 1...count {
+                actor ! (Action.increment, actor)
+            }
+            
+            let doneExpectation = expectation(description: "done")
+            actor ! Action.done(doneExpectation)
+            wait(for: [doneExpectation], timeout: 10)
+            XCTAssert(actor.count == count, "received \(actor.count)")
+        }
+        print("done")
+    }
+    
 }

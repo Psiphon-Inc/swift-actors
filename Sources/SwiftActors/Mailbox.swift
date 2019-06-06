@@ -26,13 +26,14 @@ public protocol MailboxOwner: class {
 public final class Mailbox<T> {
     
     weak var owner: MailboxOwner?
-    let mailboxDispatch: DispatchQueue
+    let mailboxDispatch: PriorityDispatch
     var queue: Queue<T>
     var stopped: Bool
     
-    init(name: String) {
-        mailboxDispatch = DispatchQueue(label: "\(name)$mailbox", target: DispatchQueue.global())
-        queue = Queue(capacity: 5)
+    init(label: String) {
+        mailboxDispatch = PriorityDispatch(label: "\(label)$mailbox")
+        //        mailboxDispatch = DispatchQueue(label: "\(label)$mailbox", target: DispatchQueue.global())
+        queue = Queue()
         stopped = false
     }
     
@@ -43,20 +44,19 @@ public final class Mailbox<T> {
         }
     }
     
+    /// - Important: `notifyOwner` is not dispatched on `mailboxDispatch`.
     private func notifyOwner() {
-        mailboxDispatch.async {
-            if let owner = self.owner {
-                for _ in 0...self.queue.count {
-                    owner.newMessage()
-                }
-            }
+        guard let owner = self.owner else {
+            return
+        }
+        for _ in 0..<self.queue.count {
+            owner.newMessage()
         }
     }
     
     /// - Note: Messages are dropped after the mailbox is stopped.
     func enqueue(_ item: T) {
         mailboxDispatch.async {
-            
             if self.stopped {
                 // TODO: maybe send the message somewhere else.
                 return
@@ -69,7 +69,7 @@ public final class Mailbox<T> {
     
     /// - Returns: nil when mailbox is stopped.
     func dequeue() -> T? {
-        return mailboxDispatch.sync(execute: { () -> T? in
+        return mailboxDispatch.syncHighPriority(execute: { () -> T? in
             
             if self.stopped {
                 return nil
@@ -81,7 +81,7 @@ public final class Mailbox<T> {
     
     /// Returns number of messages in the mailbox at this point in time.
     func count() -> Int {
-        return mailboxDispatch.sync(execute: { () -> Int in
+        return mailboxDispatch.syncHighPriority(execute: { () -> Int in
             return queue.count
         })
     }
