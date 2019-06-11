@@ -111,8 +111,8 @@ public class LocalActorContext: ActorContext {
     
     public func start() {
         dispatch.asyncHighPriority {
+            precondition(self.state != .started, "actor '\(self.name)' already started")
             guard self.state == .spawned else {
-                print("context state '\(self.state)' is not 'spawned'")
                 return
             }
             self.actor.preStart()

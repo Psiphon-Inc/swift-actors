@@ -96,7 +96,7 @@ public extension Actor {
     }
 }
 
-infix operator !
+infix operator ! : AssignmentPrecedence
 
 public func ! (lhs: Actor, rhs: AnyMessage) {
     lhs.tell(message: rhs)

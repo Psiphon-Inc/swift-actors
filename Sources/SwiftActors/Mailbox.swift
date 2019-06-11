@@ -19,28 +19,31 @@
 
 import Foundation
 
-public protocol MailboxOwner: class {
+protocol MailboxOwner: class {
+    var dispatch: PriorityDispatch { get }
     func newMessage()
 }
 
-public final class Mailbox<T> {
+final class Mailbox<T> {
     
     weak var owner: MailboxOwner?
     let mailboxDispatch: PriorityDispatch
     var queue: Queue<T>
     var stopped: Bool
+    var suspendCount = 0
     
     init(label: String) {
         mailboxDispatch = PriorityDispatch(label: "\(label)$mailbox")
-        //        mailboxDispatch = DispatchQueue(label: "\(label)$mailbox", target: DispatchQueue.global())
         queue = Queue()
         stopped = false
     }
     
     func setOwner(_ owner: MailboxOwner) {
+        precondition(self.owner == nil, "mailbox already has an owner")
         mailboxDispatch.async {
             self.owner = owner
-            self.notifyOwner()
+            self.suspendCount = 0
+            self.owner?.newMessage()
         }
     }
     
@@ -56,26 +59,45 @@ public final class Mailbox<T> {
     
     /// - Note: Messages are dropped after the mailbox is stopped.
     func enqueue(_ item: T) {
-        mailboxDispatch.async {
+        mailboxDispatch.sync {
+            precondition(self.suspendCount == 0 || self.suspendCount == 1, "suspend count is \(self.suspendCount)")
+            
             if self.stopped {
                 // TODO: maybe send the message somewhere else.
                 return
             }
             
             self.queue.enqueue(item)
-            self.notifyOwner()
+            
+            // If the queue count is exactly 1, then resumes the dispatch queue.
+            if self.queue.count == 1 && self.suspendCount == 1 {
+                self.owner?.dispatch.defaultPriorityDispatch.resume()
+                self.suspendCount -= 1
+            }
         }
     }
     
     /// - Returns: nil when mailbox is stopped.
     func dequeue() -> T? {
         return mailboxDispatch.syncHighPriority(execute: { () -> T? in
+            precondition(self.suspendCount == 0, "suspend count is \(self.suspendCount)")
             
             if self.stopped {
                 return nil
             }
             
-            return queue.dequeue()
+            let message = queue.dequeue()
+            
+            if self.queue.count == 0 && self.suspendCount == 0 {
+                self.owner?.dispatch.defaultPriorityDispatch.suspend()
+                self.suspendCount += 1
+
+            }
+            
+            // Unconditionally sends notify message.
+            self.owner?.newMessage()
+            
+            return message
         })
     }
     

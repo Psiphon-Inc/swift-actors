@@ -29,6 +29,11 @@ public final class PriorityDispatch {
         defaultPriorityDispatch = DispatchQueue(label: label, target: highPriorityDispatch)
     }
     
+    // Executes `work` synchronously with default priority.
+    func sync<T>(execute work: () -> T) -> T {
+        return defaultPriorityDispatch.sync(execute: work)
+    }
+    
     /// Pauses default priority queue, and synchronously executes `work` on high priority queue
     /// before resuming default priority queue.
     func syncHighPriority<T>(execute work: () -> T) -> T {
