@@ -115,7 +115,7 @@ class ActorPerfTests: XCTestCase {
         let actor = system.spawn(name: "multiple", actor: MultipleMsg())
         
         self.measure {
-            let count =  1000
+            let count = 10_000
             
             actor ! Action.reset
             for _ in 1...count {
