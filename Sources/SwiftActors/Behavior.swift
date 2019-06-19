@@ -23,6 +23,7 @@ public enum Receive {
     case new(Behavior)
     case same
     case stop
+    case unhandled
 }
 
 public typealias Behavior = (AnyMessage) throws -> Receive

@@ -244,12 +244,15 @@ extension LocalActorContext: MailboxOwner {
                         break
                     case .stop:
                         self.stop()
+                    case .unhandled:
+                        try self.unhandled()
                     }
                 } catch ActorErrors.unhandled(let message){
                     // TODO Log these with a logger from root actor.
-                    print("unhandled! \(message)")
+                    self.system.fatalError("Unhandled! \(message)")
                 } catch {
                     // TODO escalate the error to the parent. Let their strategy guide you.
+                    preconditionFailure("Unexpected error \(error)")
                 }
             }
         }

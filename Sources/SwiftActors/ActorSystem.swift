@@ -77,4 +77,8 @@ public class ActorSystem {
         }
     }
     
+    func fatalError(_ message: String) {
+        preconditionFailure(message)
+    }
+    
 }

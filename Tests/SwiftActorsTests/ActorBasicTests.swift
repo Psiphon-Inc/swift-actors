@@ -18,7 +18,7 @@
  */
 
 import XCTest
-import SwiftActors
+@testable import SwiftActors
 
 extension XCTestExpectation: AnyMessage {}
 
@@ -121,7 +121,7 @@ final class ActorBasicTests: XCTestCase {
         wait(for: [forwardExpect, noopExpect], timeout: 1, enforceOrder: true)
     }
 
-    func testSwitchBehavior() {
+    func testReceiveNewBehavior() {
         // Arrange
         let expectations = [ expectation(description: "A1"),
                              expectation(description: "A2"),
@@ -223,6 +223,46 @@ final class ActorBasicTests: XCTestCase {
         let _ = system.spawn(name: "testActor", actor: testActor)
         
         wait(for: expectations, timeout: 1, enforceOrder: true)
+    }
+    
+    func testReceiveUnhandledBehavior() {
+        
+        // Arrange
+        let fatalErrorExpectation = expectation(description: "fatalErrorExpectation")
+        
+        // Subclasses ActorSystem to fulfill expectation on fatalError instead of panicking.
+        class TestActorSystem: ActorSystem {
+            var expectation: XCTestExpectation
+            
+            init(name: String, expectation: XCTestExpectation) {
+                self.expectation = expectation
+                super.init(name: name)
+            }
+            
+            override func fatalError(_ message: String) {
+                expectation.fulfill()
+            }
+        }
+        
+        let testSystem = TestActorSystem(name: "ReceiveUnhandledBehaviorSystem", expectation: fatalErrorExpectation)
+        
+        class TestActor: Actor {
+            var context: ActorContext!
+            var receive: Behavior = { msg -> Receive in
+                return .unhandled
+            }
+        }
+        
+        let testActor = testSystem.spawn(name: "actor", actor: TestActor())
+        
+        // Act
+        testActor.tell(message: "msg1")
+        
+        // Assert
+        wait(for: [fatalErrorExpectation], timeout: 1)
+        
+        // Cleanup
+        testSystem.stop()
     }
     
     func testBangOperator() {
