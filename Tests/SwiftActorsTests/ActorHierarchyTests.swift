@@ -47,7 +47,7 @@ class ActorHierarchyTests: XCTestCase {
             
             let expects: [XCTestExpectation]
             
-            lazy var receive: Behavior = { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> Receive in
                 if let msg = msg as? String {
                     if msg == "ping" {
                         self.expects[0].fulfill()
@@ -86,7 +86,7 @@ class ActorHierarchyTests: XCTestCase {
             var context: ActorContext!
             let expect: XCTestExpectation
             
-            lazy var receive: Behavior = { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> Receive in
                 guard let msg = msg as? String else {
                     XCTFail()
                     return .same
@@ -114,7 +114,7 @@ class ActorHierarchyTests: XCTestCase {
         class PingActor: Actor {
             var context: ActorContext!
             
-            lazy var receive: Behavior = { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> Receive in
                 guard let sender = self.context.sender() else {
                     XCTFail()
                     return .same
@@ -158,7 +158,7 @@ class ActorHierarchyTests: XCTestCase {
                 startExpect = start
             }
             
-            lazy var receive: Behavior = { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> Receive in
                 guard let msg = msg as? Message else {
                     XCTFail()
                     return .same
@@ -214,7 +214,7 @@ class ActorHierarchyTests: XCTestCase {
                 stopExpect = stop
             }
             
-            lazy var receive: Behavior = { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> Receive in
                 guard let msg = msg as? Message else {
                     XCTFail()
                     return .same

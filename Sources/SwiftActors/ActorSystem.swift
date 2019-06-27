@@ -24,7 +24,7 @@ class RootActor: Actor {
     
     var stopGroup: DispatchGroup?
     
-    lazy var receive: Behavior = { [unowned self] msg -> Receive in
+    lazy var receive = behavior { [unowned self] msg -> Receive in
         return .same
     }
     

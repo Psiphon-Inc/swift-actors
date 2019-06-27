@@ -237,7 +237,7 @@ extension LocalActorContext: MailboxOwner {
                 
             case .user(let message):
                 do {
-                    switch try behavior(message) {
+                    switch try behavior(.unhandled(message)) {
                     case .new(let newBehavior):
                         self.behavior = newBehavior
                     case .same:

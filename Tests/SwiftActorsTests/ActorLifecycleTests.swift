@@ -47,7 +47,7 @@ class ActorLifecycleTests: XCTestCase {
             var context: ActorContext!
             var expectations: [XCTestExpectation]
             
-            lazy var receive: Behavior = { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> Receive in
 
                 if let i = msg as? Int {
                     self.expectations[i].fulfill()
@@ -81,7 +81,7 @@ class ActorLifecycleTests: XCTestCase {
             var context: ActorContext!
             let expect: XCTestExpectation
             
-            lazy var receive: Behavior = { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> Receive in
                 self.expect.fulfill()
                 return .same
             }
@@ -111,7 +111,7 @@ class ActorLifecycleTests: XCTestCase {
             var preStartValue: String = "notStarted"
             let expect: XCTestExpectation
             
-            lazy var receive: Behavior = { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> Receive in
                 return .same
             }
             
@@ -160,7 +160,7 @@ class ActorLifecycleTests: XCTestCase {
                 preStartExpect = preStart
             }
             
-            lazy var receive: Behavior = { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> Receive in
                 return .same
             }
             
@@ -226,7 +226,7 @@ class ActorLifecycleTests: XCTestCase {
             var context: ActorContext!
             var counter: Int = 0
             
-            lazy var receive: Behavior = { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> Receive in
                 
                 XCTAssert((self.context as! LocalActorContext).state == .started)
                 

@@ -20,18 +20,36 @@
 import Foundation
 
 public enum Receive {
+    case unhandled(AnyMessage)
     case new(Behavior)
     case same
     case stop
-    case unhandled
 }
 
-public typealias Behavior = (AnyMessage) throws -> Receive
+public typealias Behavior = (Receive) throws -> Receive
+
+public func behavior(_ processor: @escaping (AnyMessage) throws -> Receive) -> Behavior {
+    return { r -> Receive in
+        if case let .unhandled(msg) = r {
+            return try processor(msg)
+        }
+        return r
+    }
+}
+
+infix operator | :TernaryPrecedence
+
+/// Pipeline operator for composing `Behavior`s.
+/// - Note: `|` is right associative.
+public func | (lhs: @escaping Behavior, rhs: @escaping Behavior) -> Behavior {
+    return { try lhs(try rhs($0)) }
+}
+
 public typealias ContextBehavior = (AnyMessage, Actor) throws -> Receive
 
 public class BehaviorActor: Actor {
     public var context: ActorContext!
-    public lazy var receive: Behavior = { [unowned self] msg throws -> Receive in
+    public lazy var receive: Behavior = behavior { [unowned self] msg throws -> Receive in
         return try self.contextBehavior(msg, self)
     }
     
