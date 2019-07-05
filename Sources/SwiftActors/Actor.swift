@@ -19,13 +19,38 @@
 
 import Foundation
 
-public enum ActorErrors: Error {
-    
-    /// Unhandled message error.
-    case unhandled(message: String)
-    
-    /// Actor response timeout error.
-    case timeout(message: String)
+public struct ActorError: Error {
+
+    enum ErrorType {
+        /// Actor invariant over state failed to hold.
+        case failedInvariant
+
+        /// Unhandled message error.
+        case unhandled
+
+        /// Actor response timeout error.
+        case timeout
+    }
+
+    let path: String
+    let message: AnyMessage
+    let errorMessage: String
+    let errorType: ErrorType
+
+    init(_ origin: Actor, _ message: AnyMessage, _ errorMessage: String, _ type: ErrorType) {
+        self.path = origin.name
+        self.message = message
+        self.errorMessage = errorMessage
+        self.errorType = type
+    }
+}
+
+public struct InvariantError: Error {
+    let message: String
+
+    public init (_ message: String) {
+        self.message = message
+    }
 }
 
 public protocol Actor: class {
@@ -33,7 +58,15 @@ public protocol Actor: class {
     var context: ActorContext! { get set }
     
     var receive: Behavior { get }
-    
+
+    /// Invariant test for the actor class.
+    /// - Note: Invariant is tested after each message that is processed.
+    /// - Parameters:
+    ///     - message: Processed message.
+    ///     - result: Result of processing the current message.
+    /// - Returns: Optionally returns an invariant if there was one, otherwise nil.
+    func invariant(message: AnyMessage, result: Receive) -> InvariantError?
+
     /// Lifecycle method called before actor starts processing messages.
     func preStart()
     
@@ -44,7 +77,11 @@ public protocol Actor: class {
 
 /// Default implementations
 public extension Actor {
-    
+
+    func invariant(message: AnyMessage, result: Receive) -> InvariantError? {
+        return nil
+    }
+
     func preStart() {}
     
     func postStop() {}

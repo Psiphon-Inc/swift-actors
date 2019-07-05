@@ -20,12 +20,19 @@
 import Foundation
 
 public enum Receive {
+    /// Message not handled.
     case unhandled(AnyMessage)
+    /// Drop current message. Behavior guarantees to have caused no have side-effects.
+    case drop
+    /// Replace current behavior with the new behavior.
     case new(Behavior)
+    /// Use current behavior for the next message.
     case same
+    /// Stop the actor.
     case stop
 }
 
+public typealias Processor = (AnyMessage) throws -> Receive
 public typealias Behavior = (Receive) throws -> Receive
 
 public func behavior(_ processor: @escaping (AnyMessage) throws -> Receive) -> Behavior {

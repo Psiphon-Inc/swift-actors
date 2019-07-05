@@ -52,8 +52,7 @@ public func ask(actor: Actor, message: AnyMessage, timeoutMillis: Int = 5000) ->
             if let msg = msg as? Ask {
                 switch msg {
                 case .timeout:
-                    promise.reject(ActorErrors.timeout(message:
-                        "ask timed out waiting on '\(actor.name)' for message '\(String.init(describing: message))'"))
+                    promise.reject(ActorError(actor, message, "ask timed out", .timeout))
                 }
             } else {
                 promise.fulfill(msg)

@@ -184,8 +184,12 @@ public class LocalActorContext: ActorContext {
     
     /// Can be called by actor's behavior when the message type that it received is not handled.
     public func unhandled() throws {
-        throw ActorErrors.unhandled(message:
-            "message '\(String(describing: currentMessage!.message))' is not handled by '\(name)'")
+        guard let msgKind = self.currentMessage?.message,
+            case let .user(message) = msgKind else {
+            preconditionFailure()
+        }
+
+        throw ActorError(self.actor, message, "unhandled message", .unhandled)
     }
     
     public func enqueueMessage(message: MessageKind, from actor: Actor?) {
@@ -226,7 +230,7 @@ extension LocalActorContext: MailboxOwner {
             defer {
                 self.currentMessage = nil
             }
-            
+
             switch msgContext.message {
             case .system(let sysMessage):
                 
@@ -234,10 +238,21 @@ extension LocalActorContext: MailboxOwner {
                 case .poisonPill:
                     self.stop()
                 }
-                
+
+
             case .user(let message):
                 do {
-                    switch try behavior(.unhandled(message)) {
+                    let result = try behavior(.unhandled(message))
+
+                    let invariantError = self.actor.invariant(message: message, result: result)
+                    if let invariantError = invariantError {
+                        throw ActorError(self.actor,
+                                         message,
+                                         invariantError.message,
+                                         .failedInvariant)
+                    }
+
+                    switch result {
                     case .new(let newBehavior):
                         self.behavior = newBehavior
                     case .same:
@@ -246,13 +261,15 @@ extension LocalActorContext: MailboxOwner {
                         self.stop()
                     case .unhandled:
                         try self.unhandled()
+                    case .drop:
+                        break
                     }
-                } catch ActorErrors.unhandled(let message){
+                } catch let error as ActorError {
                     // TODO Log these with a logger from root actor.
-                    self.system.fatalError("Unhandled! \(message)")
+                    self.system.fatalError(error)
                 } catch {
                     // TODO escalate the error to the parent. Let their strategy guide you.
-                    preconditionFailure("Unexpected error \(error)")
+                    preconditionFailure("unexpected error \(error)")
                 }
             }
         }

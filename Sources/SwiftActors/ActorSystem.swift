@@ -77,8 +77,10 @@ public class ActorSystem {
         }
     }
     
-    func fatalError(_ message: String) {
-        preconditionFailure(message)
+    func fatalError(_ error: ActorError) {
+        preconditionFailure("Fatal error at '\(error.path)' " +
+            "processing '\(String(describing: error.message))': " +
+            "'\(error.errorMessage)' '\(String(describing: error.errorType))'")
     }
     
 }

@@ -21,6 +21,7 @@ import XCTest
 @testable import SwiftActors
 
 infix operator |
+infix operator <
 
 extension XCTestExpectation: AnyMessage {}
 
@@ -235,21 +236,16 @@ final class ActorBasicTests: XCTestCase {
         // Arrange
         let fatalErrorExpectation = expectation(description: "fatalErrorExpectation")
         
-        // Subclasses ActorSystem to fulfill expectation on fatalError instead of panicking.
-        class TestActorSystem: ActorSystem {
-            var expectation: XCTestExpectation
-            
-            init(name: String, expectation: XCTestExpectation) {
-                self.expectation = expectation
-                super.init(name: name)
-            }
-            
-            override func fatalError(_ message: String) {
-                expectation.fulfill()
-            }
-        }
-        
-        let testSystem = TestActorSystem(name: "ReceiveUnhandledBehaviorSystem", expectation: fatalErrorExpectation)
+        let testSystem = TestActorSystem(
+            name: "ReceiveUnhandledBehaviorSystem",
+            expectation: fatalErrorExpectation,
+            expectationTest: {
+                if case .unhandled = $0.errorType {
+                    return true
+                }
+                XCTFail()
+                return false
+        })
         
         class TestActor: Actor {
             var context: ActorContext!
@@ -485,6 +481,68 @@ final class ActorBasicTests: XCTestCase {
         // Assert
         wait(for: [expect], timeout: 1)
         XCTAssert(testActor.counter == 11)
+    }
+
+    func testActorInvariant() {
+
+        // Arrange
+        class InvariantActor: Actor {
+            var context: ActorContext!
+
+            var counter: Int = 0
+
+            lazy var receive = behavior { [unowned self] in
+                guard let msg = $0 as? String else {
+                    XCTFail()
+                    return .same
+                }
+
+                if msg == "increment" {
+                    self.counter += 1
+                }
+
+                return .same
+            }
+
+            func invariant(message: AnyMessage, result: Receive) -> InvariantError? {
+                guard let msg = message as? String, msg == "increment" else {
+                    XCTFail()
+                    return InvariantError("msg != 'increment'")
+                }
+                guard case .same = result else {
+                    XCTFail()
+                    return InvariantError("result != .same")
+                }
+                guard counter < 2 else {
+                    return InvariantError("counter >= 2")
+                }
+                return nil
+            }
+        }
+
+        let invariantFail = expectation(description: "invariantFail")
+
+        let testSystem = TestActorSystem(
+            name: "InvariantTestSystem",
+            expectation: invariantFail,
+            expectationTest: {
+                if case .failedInvariant = $0.errorType,
+                    $0.errorMessage == "counter >= 2" {
+                    return true
+                }
+                XCTFail()
+                return false
+        })
+
+        let actor = testSystem.spawn(name: "actor", actor: InvariantActor())
+
+        // Act
+        actor ! "increment"  // Should add to counter
+        actor ! "increment"  // Should add to counter and result in fatal error.
+
+        // Assert
+        wait(for: [invariantFail], timeout: 1)
+        XCTAssert(actor.counter == 2)
     }
 
 }

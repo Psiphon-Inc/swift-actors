@@ -18,7 +18,7 @@
  */
 
 import XCTest
-import SwiftActors
+@testable import SwiftActors
 
 class PatternsTests: XCTestCase {
     
@@ -61,7 +61,12 @@ class PatternsTests: XCTestCase {
         let msg = EchoActor.Action.respondWithDelay(interval: 0.2, value: 1)
         ask(actor: echo, message: msg, timeoutMillis: 100).catch { err in
             // Assert
-            if case ActorErrors.timeout = err {
+            guard let err = err as? ActorError else {
+                XCTFail()
+                return
+            }
+
+            if case .timeout = err.errorType {
                 done.fulfill()
             } else {
                 XCTFail()
@@ -98,8 +103,12 @@ class PatternsTests: XCTestCase {
         // Act
         let msg = EchoActor.Action.respondWithDelay(interval: 0.2, value: 1)
         (echo !! (msg, 100)).catch { err in
+            guard let err = err as? ActorError else {
+                XCTFail()
+                return
+            }
             // Assert
-            if case ActorErrors.timeout = err {
+            if case .timeout = err.errorType {
                 done.fulfill()
             } else {
                 XCTFail()

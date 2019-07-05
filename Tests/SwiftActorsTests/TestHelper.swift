@@ -18,7 +18,8 @@
  */
 
 import Foundation
-import SwiftActors
+import XCTest
+@testable import SwiftActors
 
 class EchoActor: Actor {
     
@@ -48,4 +49,25 @@ class EchoActor: Actor {
         return .same
     }
     
+}
+
+// Subclasses ActorSystem to fulfill expectation on fatalError instead of panicking.
+class TestActorSystem: ActorSystem {
+    let expectation: XCTestExpectation
+    let expectationTest: (ActorError) -> Bool
+
+    init(name: String,
+         expectation: XCTestExpectation,
+         expectationTest: @escaping (ActorError) -> Bool) {
+
+        self.expectation = expectation
+        self.expectationTest = expectationTest
+        super.init(name: name)
+    }
+
+    override func fatalError(_ error: ActorError) {
+        if expectationTest(error) {
+            expectation.fulfill()
+        }
+    }
 }
