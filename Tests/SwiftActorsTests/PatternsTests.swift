@@ -77,7 +77,7 @@ class PatternsTests: XCTestCase {
         let done = expectation(description: "testDone")
         
         // Act
-        (echo !! 1).then { result in
+        (echo ?! 1).then { result in
             // Assert
             guard let result = result as? Int else {
                 XCTFail()
@@ -97,7 +97,7 @@ class PatternsTests: XCTestCase {
         
         // Act
         let msg = EchoActor.Action.respondWithDelay(interval: 0.2, value: 1)
-        (echo !! (msg, 100)).catch { err in
+        (echo ?! (msg, 100)).catch { err in
             // Assert
             if case ActorErrors.timeout = err {
                 done.fulfill()

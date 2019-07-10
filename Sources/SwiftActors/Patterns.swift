@@ -24,13 +24,13 @@ fileprivate enum Ask: AnyMessage {
     case timeout
 }
 
-infix operator !!
+infix operator ?!
 
-public func !! (lhs: Actor, rhs: AnyMessage) -> Promise<Any> {
+public func ?! (lhs: Actor, rhs: AnyMessage) -> Promise<Any> {
     return ask(actor: lhs, message: rhs)
 }
 
-public func !! (lhs: Actor, rhs: (message: AnyMessage, timeoutMillis: Int)) -> Promise<Any> {
+public func ?! (lhs: Actor, rhs: (message: AnyMessage, timeoutMillis: Int)) -> Promise<Any> {
     return ask(actor: lhs, message: rhs.message, timeoutMillis: rhs.timeoutMillis)
 }
 
