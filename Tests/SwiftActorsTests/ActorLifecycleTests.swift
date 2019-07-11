@@ -281,12 +281,12 @@ class ActorLifecycleTests: XCTestCase {
             
             // Assert
             XCTAssert(actorContext.state == .stopped)
-            XCTAssert(actorContext.mailbox.stopped == true)
+            XCTAssert(actorContext.mailbox.stopped.value == true)
             
             // Test specific assertions.
             switch testNum {
             case 1, 2:
-                XCTAssert(actorContext.mailbox.stopped == true)
+                XCTAssert(actorContext.mailbox.stopped.value == true)
                 XCTAssert(actor.counter == 1, "actor counter is \(actor.counter) - test \(testNum)")
             default: break
             }

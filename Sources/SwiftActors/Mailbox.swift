@@ -18,6 +18,7 @@
  */
 
 import Foundation
+import SwiftAtomics
 
 protocol MailboxOwner: class {
     var dispatch: PriorityDispatch { get }
@@ -26,84 +27,78 @@ protocol MailboxOwner: class {
 
 final class Mailbox<T> {
     
+    // TODO! this has to be turned atomic
     weak var owner: MailboxOwner?
-    let mailboxDispatch: PriorityDispatch
-    var queue: Queue<T>
-    var stopped: Bool
-    var suspendCount = 0
+    let queue: MPSCLockFreeQueue<T>
+    var stopped = AtomicBool()
+    
+    var suspendCount = AtomicInt(0)
     
     init(label: String) {
-        mailboxDispatch = PriorityDispatch(label: "\(label)$mailbox")
-        queue = Queue()
-        stopped = false
+        queue = MPSCLockFreeQueue()
+        stopped.initialize(false)
     }
     
     func setOwner(_ owner: MailboxOwner) {
         precondition(self.owner == nil, "mailbox already has an owner")
-        mailboxDispatch.async {
-            self.owner = owner
-            self.suspendCount = 0
-            self.owner?.newMessage()
-        }
+//        mailboxDispatch.async {
+        self.owner = owner
+        suspendCount.store(0)
+        
+        self.owner?.newMessage()
     }
     
     /// - Note: Messages are dropped after the mailbox is stopped.
     func enqueue(_ item: T) {
-        mailboxDispatch.sync {
-            precondition(self.suspendCount == 0 || self.suspendCount == 1, "suspend count is \(self.suspendCount)")
-            
-            if self.stopped {
-                // TODO: maybe send the message somewhere else.
-                return
-            }
-            
-            self.queue.enqueue(item)
-            
-            // If the queue count is exactly 1, then resumes the dispatch queue.
-            if self.queue.count == 1 && self.suspendCount == 1 {
-                self.owner?.dispatch.defaultPriorityDispatch.resume()
-                self.suspendCount -= 1
-            }
+//        precondition(self.suspendCount == 0 || self.suspendCount == 1, "suspend count is \(self.suspendCount)")
+        
+        if stopped.value == true {
+            // TODO: maybe send the message somewhere else.
+            return
+        }
+        
+        self.queue.enqueue(item)
+        
+        // If the queue count is exactly 1, then resumes the dispatch queue.
+        if self.queue.count == 1 && suspendCount.value == 1 {
+            self.owner?.dispatch.defaultPriorityDispatch.resume()
+            suspendCount.decrement()
+//            self.suspendCount -= 1
         }
     }
     
     /// - Returns: nil when mailbox is stopped.
     func dequeue() -> T? {
-        return mailboxDispatch.syncHighPriority(execute: { () -> T? in
-            precondition(self.suspendCount == 0, "suspend count is \(self.suspendCount)")
-            
-            if self.stopped {
+//        return mailboxDispatch.syncHighPriority(execute: { () -> T? in
+//            precondition(self.suspendCount == 0, "suspend count is \(self.suspendCount)")
+        
+            if stopped.value == true {
                 return nil
             }
             
             let message = queue.dequeue()
             
-            if self.queue.count == 0 && self.suspendCount == 0 {
+            if queue.count == 0 && suspendCount.value == 0 {
                 self.owner?.dispatch.defaultPriorityDispatch.suspend()
-                self.suspendCount += 1
-
+                self.suspendCount.increment()
             }
             
             // Unconditionally sends notify message.
             self.owner?.newMessage()
             
             return message
-        })
+//        })
     }
     
     /// Returns number of messages in the mailbox at this point in time.
     func count() -> Int {
-        return mailboxDispatch.syncHighPriority(execute: { () -> Int in
-            return queue.count
-        })
+        return queue.count
     }
     
     /// Async function that terminates the mailbox.
     /// Any messages sent after this call will not be queued.
     func stop() {
-        mailboxDispatch.async {
-            self.stopped = true
-        }
+        stopped.store(true)
     }
     
 }
