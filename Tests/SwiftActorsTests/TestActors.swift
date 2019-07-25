@@ -17,10 +17,14 @@
  *
  */
 
+import XCTest
 import Foundation
 import SwiftActors
 
+let echoActorProps = Props(EchoActor.self, param: ())
+
 class EchoActor: Actor {
+    typealias ParamType = Void
     
     enum Action: AnyMessage {
         case respondWithDelay(interval: TimeInterval, value: Int)
@@ -47,5 +51,7 @@ class EchoActor: Actor {
         
         return .same
     }
+    
+    required init(_ param: Void) {}
     
 }

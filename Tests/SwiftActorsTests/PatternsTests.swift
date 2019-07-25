@@ -35,7 +35,7 @@ class PatternsTests: XCTestCase {
     
     func testAskPatternBasicFunctionality() {
         // Arrange
-        let echo = system.spawn(name: "echo", actor: EchoActor())
+        let echo = system.spawn(echoActorProps, name: "echo")
         let done = expectation(description: "testDone")
         
         // Act
@@ -54,7 +54,7 @@ class PatternsTests: XCTestCase {
     
     func testAskPatternTimeout() {
         // Arrange
-        let echo = system.spawn(name: "echo", actor: EchoActor())
+        let echo = system.spawn(echoActorProps, name: "echo")
         let done = expectation(description: "testDone")
         
         // Act
@@ -73,7 +73,7 @@ class PatternsTests: XCTestCase {
     
     func testBangBangOperator() {
         // Arrange
-        let echo = system.spawn(name: "echo", actor: EchoActor())
+        let echo = system.spawn(echoActorProps, name: "echo")
         let done = expectation(description: "testDone")
         
         // Act
@@ -92,7 +92,7 @@ class PatternsTests: XCTestCase {
     
     func testBangBangOperatorWithTimeout() {
         // Arrange
-        let echo = system.spawn(name: "echo", actor: EchoActor())
+        let echo = system.spawn(echoActorProps, name: "echo")
         let done = expectation(description: "testDone")
         
         // Act

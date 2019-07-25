@@ -26,51 +26,76 @@ fileprivate enum Ask: AnyMessage {
 
 infix operator ?!
 
-public func ?! (lhs: Actor, rhs: AnyMessage) -> Promise<Any> {
+public func ?! (lhs: ActorRef, rhs: AnyMessage) -> Promise<Any> {
     return ask(actor: lhs, message: rhs)
 }
 
-public func ?! (lhs: Actor, rhs: (message: AnyMessage, timeoutMillis: Int)) -> Promise<Any> {
+public func ?! (lhs: ActorRef, rhs: (message: AnyMessage, timeoutMillis: Int)) -> Promise<Any> {
     return ask(actor: lhs, message: rhs.message, timeoutMillis: rhs.timeoutMillis)
 }
 
-public func ask(actor: Actor, message: AnyMessage, timeoutMillis: Int = 5000) -> Promise<Any> {
-    let uid = actor.context.system.newActorUID()
+struct AskActorParam {
+    let promise: Promise<Any>
+    let timer: DispatchSourceTimer
+    let message: AnyMessage
+    let receiver: ActorRef
+}
+
+class AskActor: Actor {
+    typealias ParamType = AskActorParam
+    
+    var context: ActorContext!
+    let params: AskActorParam
+    
+    lazy var receive = behavior { [unowned self] in
+        defer {
+            self.params.timer.cancel()
+        }
+        
+        // On timeout rejects promise, otherwise the promise is fulfilled.
+        if let msg = $0 as? Ask {
+            switch msg {
+            case .timeout:
+                self.params.promise.reject(ActorErrors.timeout(message:
+                    "ask timed out waiting on '\(self.params.receiver.name)' for "
+                        + "message '\(String.init(describing: self.params.message))'"))
+            }
+        } else {
+            self.params.promise.fulfill($0)
+        }
+        
+        return .stop
+    }
+    
+    required init(_ param: AskActorParam) {
+        self.params = param
+    }
+    
+    func preStart() {
+        // TODO This is fired on some background queue. For less resource waste we can fire this on mailbox dispatch queue.
+        params.timer.setEventHandler { [unowned self] in
+            self ! Ask.timeout
+        }
+        params.timer.resume()
+        
+        // Sends message after activating the timer to ensure that timer doesn't get cancelled
+        // before getting activated. Although this is highly unlikely.
+        params.receiver ! (params.message, self)
+    }
+}
+
+public func ask(actor: ActorRef, message: AnyMessage, timeoutMillis: Int = 5000) -> Promise<Any> {
+    let uid = actor.system.newActorUID()
     let promise = Promise<Any>.pending()
     let timer = DispatchSource.makeTimerSource()
     timer.schedule(deadline: .now() + DispatchTimeInterval.milliseconds(timeoutMillis))
     
-    _ = actor.context.system.spawn(name: "ask.\(actor.name).\(uid)",
-        actor: BehaviorActor(behavior: { msg, ctx throws -> Receive in
-            
-            defer {
-                timer.cancel()
-                ctx.stop()
-            }
-            
-            // On timeout rejects promise, otherwise the promise is fulfilled.
-            if let msg = msg as? Ask {
-                switch msg {
-                case .timeout:
-                    promise.reject(ActorErrors.timeout(message:
-                        "ask timed out waiting on '\(actor.name)' for message '\(String.init(describing: message))'"))
-                }
-            } else {
-                promise.fulfill(msg)
-            }
-            
-            return .stop
-        }, preStart: { ctx in
-            // TODO This is fired on some background queue. For less resource waste we can fire this on mailbox dispatch queue.
-            timer.setEventHandler { [unowned ctx] in
-                ctx.tell(message: Ask.timeout, from: ctx)
-            }
-            timer.resume()
-            
-            // Sends message after activating the timer to ensure that timer doesn't get cancelled
-            // before getting activated. Although this is highly unlikely.
-            actor.tell(message: message, from: ctx)
-        }))
+    
+    let props = Props(AskActor.self,
+                      param: AskActorParam(promise: promise, timer: timer,
+                                            message: message, receiver: actor))
+    
+    actor.system.spawn(props, name: "ask.\(actor.name).\(uid)")
     
     return promise
 }

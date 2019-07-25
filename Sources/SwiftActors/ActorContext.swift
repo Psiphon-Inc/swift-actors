@@ -27,7 +27,7 @@ public enum MessageKind {
 /// Wraps a message sent to an actor with its context.
 struct MessageContext {
     let message: MessageKind
-    let sender: Actor?
+    let sender: ActorRef?
 }
 
 enum ActorState: Int, Ordinal {
@@ -37,47 +37,73 @@ enum ActorState: Int, Ordinal {
     case stopped
 }
 
-public protocol ActorContext: class {
+public protocol ActorContext: ActorRef, ActorRefFactory {
     
     var path: String { get }
     
     var name: String { get }
     
-    var parent: Actor? { get }
+    var parent: ActorContext? { get }
     
-    var children: [String: Actor] { get }
+    var children: [String: ActorContext] { get }
     
     var system: ActorSystem { get }
     
-    func sender() -> Actor?
-    
-    func start()
+    func sender() -> ActorRef?
     
     func stop()
     
-    func stop(child: Actor)
+    func tell(message: MessageKind, from actor: ActorRef?)
     
-    @discardableResult func spawn<T>(name: String, actor childActor: T) -> T where T: Actor
+    @discardableResult
+    func spawn<T>(_ props: Props<T>, name: String) -> ActorRef where T: Actor
     
     func unhandled() throws
     
-    /// TODO: functions below are internal. Maybe create a separate internal context protocol.
+    /// Special messages:
+    /// Should ideally be passed in as a high priority message of type `AnyMessage`.
     
     func onChildStopped(child: ActorContext)
     
-    func enqueueMessage(message: MessageKind, from actor: Actor?)
+}
+
+extension ActorContext {
+    
+    public func tell(message: AnyMessage) {
+        tell(message: .user(message: message), from: nil)
+    }
+    
+    public func tell(message: SystemMessage) {
+        tell(message: .system(message: message), from: nil)
+    }
+    
+    public func tell(message: AnyMessage, from actor: ActorRef) {
+        tell(message: .user(message: message), from: actor)
+    }
     
 }
 
-public class LocalActorContext: ActorContext {
+public protocol ActorLifecycleContext: ActorContext {
+    associatedtype ActorType: Actor
+    
+    init(name: String, system: ActorSystem, actor: ActorType, parent: ActorContext?)
+    
+    func start()
+    
+    func stop(child: ActorRef)
+    
+}
+
+public class LocalActorContext<ActorType: Actor>: ActorLifecycleContext {
+    public typealias ActorType = ActorType
     
     public let path: String
     public let name: String
-    public var children: [String: Actor]
-    public unowned var parent: Actor?
+    public var children: [String: ActorContext]
+    public unowned var parent: ActorContext?
     public unowned var system: ActorSystem
     
-    unowned var actor: Actor
+    var actor: ActorType?
     
     let mailbox: Mailbox<MessageContext>
     let dispatch: PriorityDispatch
@@ -86,12 +112,14 @@ public class LocalActorContext: ActorContext {
     var behavior: Behavior!
     var state: ActorState
     
-    init(name: String, parentPath: String = "", system: ActorSystem, actor: Actor, parent: Actor? = nil) {
+    public required init(name: String, system: ActorSystem, actor: ActorType,
+                         parent: ActorContext?) {
+        
         self.name = name
-        if parentPath.isEmpty {
-            path = name
+        if let parent = parent {
+            path = "\(parent.path).\(name)"
         } else {
-            path = "\(parentPath).\(name)"
+            path = name
         }
         self.system = system
         self.parent = parent
@@ -99,13 +127,13 @@ public class LocalActorContext: ActorContext {
         dispatch = PriorityDispatch(label: self.path)
         waitGroup = DispatchGroup()
         currentMessage = nil
-        children = [String: Actor]()
+        children = [String: ActorContext]()
         behavior = actor.receive
         state = .spawned
         mailbox = Mailbox(label: name)
     }
     
-    public func sender() -> Actor? {
+    public func sender() -> ActorRef? {
         return currentMessage?.sender
     }
     
@@ -115,7 +143,7 @@ public class LocalActorContext: ActorContext {
             guard self.state == .spawned else {
                 return
             }
-            self.actor.preStart()
+            self.actor!.preStart()
             self.state = .started
             
             self.mailbox.setOwner(self)
@@ -144,26 +172,29 @@ public class LocalActorContext: ActorContext {
                 guard self.children.count == 0 else {
                     preconditionFailure()
                 }
-                self.actor.postStop()
+                self.actor!.postStop()
+                self.actor = .none
                 self.state = .stopped
-                self.parent?.context.onChildStopped(child: self)
+                self.parent?.onChildStopped(child: self)
             }
         }
     }
     
-    public func stop(child: Actor) {
+    public func stop(child: ActorRef) {
         dispatch.asyncHighPriority {
-            guard self.children.keys.contains(child.name) else {
+            guard let childCtx = self.children[child.name] else {
                 preconditionFailure("actor '\(child.name)' cannot be stopped since it is not direct descendent of this actor")
             }
             
-            child.stop()
+            childCtx.stop()
         }
     }
     
-    public func spawn<T>(name: String, actor childActor: T) -> T where T: Actor {
-        let childCtx = LocalActorContext(name: name, parentPath: self.path, system: self.system, actor: childActor, parent: self.actor)
-        childActor.bind(context: childCtx)
+    public func spawn<T>(_ props: Props<T>, name: String) -> ActorRef where T : Actor {
+        let child = props.cls.init(props.param)
+        let childCtx = LocalActorContext<T>(name: name, system: self.system,
+                                            actor: child, parent: self)
+        child.bind(context: childCtx)
         
         dispatch.asyncHighPriority {
             // An actor can only spawn children if not already stopping.
@@ -176,10 +207,11 @@ public class LocalActorContext: ActorContext {
             if self.children.keys.contains(name) {
                 preconditionFailure("child actor \(name) is not unique")
             }
-            self.children[name] = childActor
-            childActor.context.start()
+            self.children[name] = childCtx
+            
+            childCtx.start()
         }
-        return childActor
+        return child
     }
     
     /// Can be called by actor's behavior when the message type that it received is not handled.
@@ -188,10 +220,11 @@ public class LocalActorContext: ActorContext {
             "message '\(String(describing: currentMessage!.message))' is not handled by '\(name)'")
     }
     
-    public func enqueueMessage(message: MessageKind, from actor: Actor?) {
+    public func tell(message: MessageKind, from actor: ActorRef?) {
         let msgContext = MessageContext(message: message, sender: actor)
         mailbox.enqueue(msgContext)
     }
+    
     
     public func onChildStopped(child: ActorContext) {
         dispatch.asyncHighPriority {
