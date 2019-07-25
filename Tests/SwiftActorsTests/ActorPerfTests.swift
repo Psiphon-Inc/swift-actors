@@ -21,13 +21,13 @@ import XCTest
 @testable import SwiftActors
 
 class ActorPerfTests: XCTestCase {
-
+    
     var system: ActorSystem!
     
     override func setUp() {
         system = ActorSystem(name: "system")
     }
-
+    
     override func tearDown() {
         system.stop()
         system = nil
@@ -44,10 +44,12 @@ class ActorPerfTests: XCTestCase {
             i += 1
         }
     }
-
+    
     func testMessageSendPerf() {
         // Arrange
         class MultipleMsg: Actor {
+            typealias ParamType = [XCTestExpectation]
+            
             let expects: [XCTestExpectation]
             var context: ActorContext!
             
@@ -60,8 +62,8 @@ class ActorPerfTests: XCTestCase {
                 return .same
             }
             
-            init(_ e: [XCTestExpectation]) {
-                expects = e
+            required init(_ param: [XCTestExpectation]) {
+                self.expects = param
             }
         }
         
@@ -77,7 +79,7 @@ class ActorPerfTests: XCTestCase {
                         expectation(description: "9") ]
         
         // Act
-        let actor = system.spawn(name: "multiple", actor: MultipleMsg(expects))
+        let actor = system.spawn(Props(MultipleMsg.self, param: expects), name: "multiple")
         var i = 0
         
         self.measure {
@@ -95,6 +97,8 @@ class ActorPerfTests: XCTestCase {
             case done(XCTestExpectation)
         }
         class MultipleMsg: Actor {
+            typealias ParamType = Void
+            
             var context: ActorContext!
             var count = 0
             
@@ -109,10 +113,12 @@ class ActorPerfTests: XCTestCase {
                 }
                 return .same
             }
+            
+            required init(_ param: Void) {}
         }
         
         // Act
-        let actor = system.spawn(name: "multiple", actor: MultipleMsg())
+        let actor = system.spawn(Props(MultipleMsg.self, param:()), name: "multiple")
         
         self.measure {
             let count = 10_000
@@ -125,7 +131,7 @@ class ActorPerfTests: XCTestCase {
             let doneExpectation = expectation(description: "done")
             actor ! Action.done(doneExpectation)
             wait(for: [doneExpectation], timeout: 10)
-            XCTAssert(actor.count == count, "received \(actor.count)")
+            XCTAssert((actor as! MultipleMsg).count == count, "received \((actor as! MultipleMsg).count)")
         }
         print("done")
     }

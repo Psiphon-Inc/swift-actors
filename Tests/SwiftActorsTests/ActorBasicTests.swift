@@ -25,6 +25,8 @@ infix operator |
 extension XCTestExpectation: AnyMessage {}
 
 class NoOpActor: Actor {
+    typealias ParamType = Void
+
     var context: ActorContext!
     
     lazy var receive = behavior { [unowned self] msg -> Receive in
@@ -36,7 +38,11 @@ class NoOpActor: Actor {
         msg.fulfill()
         return .same
     }
+
+    required init(_ param: ParamType) {}
 }
+
+let noopActorProps = Props(NoOpActor.self, param: ())
 
 final class ActorBasicTests: XCTestCase {
 
@@ -51,13 +57,12 @@ final class ActorBasicTests: XCTestCase {
         system = nil
     }
 
-    
     func testOneMessageSend() {
         // Arrange
         let expect = expectation(description: "receive message")
         
         // Act
-        let ref = system.spawn(name: "testActor", actor: NoOpActor())
+        let ref = system.spawn(noopActorProps, name: "testOneMessageSend")
         ref.tell(message: expect)
         
         // Assert
@@ -69,7 +74,7 @@ final class ActorBasicTests: XCTestCase {
         var expectations = [XCTestExpectation]()
         
         // Act
-        let ref = system.spawn(name: "testActor", actor: NoOpActor())
+        let ref = system.spawn(noopActorProps, name: "testActor")
         for _ in 1...10 {
             let expect = expectation(description: "receive message")
             expectations.append(expect)
@@ -83,10 +88,12 @@ final class ActorBasicTests: XCTestCase {
     func testMessageSendActorToActor() {
         // Arrange
         enum Forwarding: AnyMessage {
-            case forward(to: NoOpActor)
+            case forward(to: ActorRef)
         }
         
         class ForwardingActor: Actor {
+            typealias ParamType = [XCTestExpectation]
+
             let forwardExpect: XCTestExpectation
             let noopExpect: XCTestExpectation
             
@@ -100,27 +107,29 @@ final class ActorBasicTests: XCTestCase {
                 }
                 return .same
             }
-            
-            init(forwardExpect: XCTestExpectation, noopExpect: XCTestExpectation) {
-                self.forwardExpect = forwardExpect
-                self.noopExpect = noopExpect
+
+            required init(_ param: ParamType) {
+                self.forwardExpect = param[0]
+                self.noopExpect = param[1]
             }
+
         }
-        
-        let forwardExpect = expectation(description: "forwarding")
-        let noopExpect = expectation(description: "noop")
-        
+
+        let expectations = [expectation(description: "forwarding"),
+                            expectation(description: "noop")]
+
+        let props = Props(ForwardingActor.self, param: expectations)
+
         // Act
-        let forwardingActor = system.spawn(name: "forwarding",
-                                           actor: ForwardingActor(forwardExpect: forwardExpect, noopExpect: noopExpect))
+        let forwardingActor = system.spawn(props, name: "forwarding")
         
-        let noopActor = system.spawn(name: "noop", actor: NoOpActor())
+        let noopActor = system.spawn(noopActorProps, name: "noop")
         
         // Sends first message to forwarding actor
         forwardingActor.tell(message: Forwarding.forward(to: noopActor))
         
         // Assert
-        wait(for: [forwardExpect, noopExpect], timeout: 1, enforceOrder: true)
+        wait(for: props.param, timeout: 1, enforceOrder: true)
     }
 
     func testReceiveNewBehavior() {
@@ -137,6 +146,8 @@ final class ActorBasicTests: XCTestCase {
         }
         
         class Switcher: Actor {
+            typealias ParamType = Void
+
             var context: ActorContext!
 
             /// TODO: probably a compiler bug.
@@ -187,158 +198,192 @@ final class ActorBasicTests: XCTestCase {
             }
             
             lazy var receive = self.behaviorA
+
+            required init(_ param: Void) {}
         }
         
-        var switcher: Switcher!
-        let testActor = BehaviorActor(behavior: { msg, ctx throws -> Receive in
-            
-            guard let msg = msg as? String else {
-                XCTFail()
+        class TestActor: Actor {
+
+            struct Params {
+                let expectations: [XCTestExpectation]
+                let switcher: ActorRef
+            }
+
+            typealias ParamType = Params
+            var context: ActorContext!
+
+            let switcher: ActorRef
+            let expectations: [XCTestExpectation]
+
+            lazy var receive = behavior { [unowned self] in
+                guard let msg = $0 as? String else {
+                    XCTFail()
+                    return .same
+                }
+
+                if msg == "A1" {
+                    self.expectations[0].fulfill()
+                }
+                if msg == "A2" {
+                    self.expectations[1].fulfill()
+                }
+                if msg == "B3" {
+                    self.expectations[2].fulfill()
+                }
+                if msg == "A4" {
+                    self.expectations[3].fulfill()
+                }
+                if msg == "B5" {
+                    self.expectations[4].fulfill()
+                }
+
                 return .same
             }
-            
-            if msg == "A1" {
-                expectations[0].fulfill()
+
+            required init(_ param: Params) {
+                self.switcher = param.switcher
+                self.expectations = param.expectations
             }
-            if msg == "A2" {
-                expectations[1].fulfill()
+
+            func preStart() {
+                // starting behavior for switch is  is `behaviorA`
+                switcher.tell(message: SwitchAction.behaviorA(1), from: self) // should respond A1
+                switcher.tell(message: SwitchAction.behaviorB(2), from: self) // should respond A2
+                switcher.tell(message: SwitchAction.behaviorA(3), from: self) // should respond B3
+                switcher.tell(message: SwitchAction.behaviorB(4), from: self) // should respond A4
+                switcher.tell(message: SwitchAction.behaviorB(5), from: self) // should respond B5
             }
-            if msg == "B3" {
-                expectations[2].fulfill()
-            }
-            if msg == "A4" {
-                expectations[3].fulfill()
-            }
-            if msg == "B5" {
-                expectations[4].fulfill()
-            }
-            
-            return .same
-        }, preStart: { ctx in
-            // starting behavior is `behaviorA`
-            switcher.tell(message: SwitchAction.behaviorA(1), from: ctx) // should respond A1
-            switcher.tell(message: SwitchAction.behaviorB(2), from: ctx) // should respond A2
-            switcher.tell(message: SwitchAction.behaviorA(3), from: ctx) // should respond B3
-            switcher.tell(message: SwitchAction.behaviorB(4), from: ctx) // should respond A4
-            switcher.tell(message: SwitchAction.behaviorB(5), from: ctx) // should respond B5
-        })
-        
+        }
+
         // Act
-        switcher = system.spawn(name: "switcher", actor: Switcher())
-        let _ = system.spawn(name: "testActor", actor: testActor)
+        let switcher = system.spawn(Props(Switcher.self, param: ()), name: "switcher")
+
+        let testActorProps = Props(TestActor.self,
+                                   param: TestActor.Params(expectations: expectations,
+                                                            switcher: switcher))
+
+        system.spawn(testActorProps, name: "testActor")
         
         wait(for: expectations, timeout: 1, enforceOrder: true)
     }
     
     func testReceiveUnhandledBehavior() {
-        
+
         // Arrange
         let fatalErrorExpectation = expectation(description: "fatalErrorExpectation")
-        
+
         // Subclasses ActorSystem to fulfill expectation on fatalError instead of panicking.
         class TestActorSystem: ActorSystem {
             var expectation: XCTestExpectation
-            
+
             init(name: String, expectation: XCTestExpectation) {
                 self.expectation = expectation
-                super.init(name: name)
+                super.init(name: name, contextType: LocalActorContext.self)
             }
-            
+
             override func fatalError(_ message: String) {
                 expectation.fulfill()
             }
         }
-        
+
         let testSystem = TestActorSystem(name: "ReceiveUnhandledBehaviorSystem", expectation: fatalErrorExpectation)
-        
+
         class TestActor: Actor {
+            typealias ParamType = Void
+
             var context: ActorContext!
-            var receive = behavior { msg -> Receive in
-                return .unhandled(msg)
+
+            var receive = behavior {
+                return .unhandled($0)
             }
+
+            required init(_ param: Void) {}
         }
-        
-        let testActor = testSystem.spawn(name: "actor", actor: TestActor())
-        
+
+        let testActor = testSystem.spawn(Props(TestActor.self, param: ()) ,name: "actor")
+
         // Act
         testActor.tell(message: "msg1")
-        
+
         // Assert
         wait(for: [fatalErrorExpectation], timeout: 1)
-        
+
         // Cleanup
         testSystem.stop()
     }
-    
+
     func testBangOperator() {
         // Arrange
         let expect = expectation(description: "receive message")
-        
+
         // Act
-        let ref = system.spawn(name: "testActor", actor: NoOpActor())
+        let ref = system.spawn(noopActorProps, name: "testActor")
         ref ! expect
-        
+
         // Assert
         wait(for: [expect], timeout: 1)
     }
-    
+
     func testBangOperatorWithSender() {
         // Arrange
         let expect = expectation(description: "message received")
-        let noop = system.spawn(name: "noop", actor: NoOpActor())
-        let echo = system.spawn(name: "echo", actor: EchoActor())
-        
+        let noop = system.spawn(noopActorProps, name: "noop")
+        let echo = system.spawn(echoActorProps, name: "echo")
+
         // Act
         // Sends `expect` message to `echo`, setting `noop` as the sender.
         echo ! (expect, noop)
-        
+
         // Assert
         wait(for: [expect], timeout: 1)
     }
-    
+
     func testCreateChildActorAsProp() {
         // Arrange
         class TestActor: Actor {
+            typealias ParamType = XCTestExpectation
+
             var context: ActorContext!
-            lazy var child: EchoActor! = context.spawn(name: "echo", actor: EchoActor())
-            
+
+            lazy var child: ActorRef? = context.spawn(echoActorProps, name: "echo")
+
             let expect: XCTestExpectation
-            
-            init(_ e: XCTestExpectation) {
-                expect = e
+
+            required init(_ param: XCTestExpectation) {
+                self.expect = param
             }
-            
+
             lazy var receive = behavior { [unowned self] msg -> Receive in
                 guard let msg = msg as? String else {
                     XCTFail()
                     return .same
                 }
-                
+
                 if msg == "echoChild" {
-                    self.child ! ("messageToChild", self)
+                    self.child! ! ("messageToChild", self)
                 }
                 if msg == "messageToChild" {
                     self.expect.fulfill()
                 }
                 return .same
             }
-            
+
             func postStop() {
                 child = nil
             }
-            
+
         }
-        
+
         let expect = expectation(description: "message back from child")
-        
+
         // Act
-        let actor = system.spawn(name: "testActor", actor: TestActor(expect))
+        let actor = system.spawn(Props(TestActor.self, param: expect), name: "testActor")
         actor ! "echoChild"
-        
+
         // Assert
         wait(for: [expect], timeout: 1)
     }
-    
+
     func testUsingClassAndStructAsMessages() {
         // Arrange
         class SetTo10: AnyMessage {}
@@ -346,17 +391,15 @@ final class ActorBasicTests: XCTestCase {
         struct Multiply: AnyMessage {
             let a: Int
         }
-        
+
         class Calculator: Actor {
+            typealias ParamType = XCTestExpectation
+
             var context: ActorContext!
             var result: Int = 10
-            
+
             let done: XCTestExpectation
-            
-            init(_ e: XCTestExpectation) {
-                done = e
-            }
-            
+
             lazy var receive = behavior { [unowned self] msg -> Receive in
                 switch msg {
                 case is SetTo10:
@@ -370,25 +413,31 @@ final class ActorBasicTests: XCTestCase {
                 }
                 return .same
             }
+
+            required init(_ param: ParamType) {
+                self.done = param
+            }
         }
-        
+
         let doneExpectation = expectation(description: "done")
-        let calc = system.spawn(name: "calc", actor: Calculator(doneExpectation))
-        
+        let calc = system.spawn(Props(Calculator.self, param: doneExpectation), name: "calc")
+
         // Act
         calc ! SetTo10()
         calc ! Multiply(a: 2)
         calc ! Done()
-        
+
         // Assert
         wait(for: [doneExpectation], timeout: 1)
-        XCTAssert(calc.result == 20)
+        XCTAssert((calc as! Calculator).result == 20)
     }
 
     func testBehaviorComposition() {
 
         // Arrange
         class TestActor: Actor {
+            typealias ParamType = XCTestExpectation
+
             var context: ActorContext!
             let doneExpectation: XCTestExpectation
             var counter: Int = 0
@@ -462,13 +511,14 @@ final class ActorBasicTests: XCTestCase {
 
             lazy var receive = self.set10 | self.decrement
 
-            init(_ expect: XCTestExpectation) {
-                doneExpectation = expect
+            required init(_ param: ParamType) {
+                self.doneExpectation = param
             }
         }
 
         let expect = expectation(description: "doneExpectation")
-        let testActor = system.spawn(name: "testBehaviorComposition", actor: TestActor(expect))
+        let testActor = system.spawn(Props(TestActor.self, param: expect),
+                                     name: "testBehaviorComposition")
 
         // Act
         testActor ! "set10"      // counter is 10 (accepts next message: "increment", "decrement")
@@ -484,7 +534,7 @@ final class ActorBasicTests: XCTestCase {
 
         // Assert
         wait(for: [expect], timeout: 1)
-        XCTAssert(testActor.counter == 11)
+        XCTAssert((testActor as! TestActor).counter == 11)
     }
 
 }

@@ -30,7 +30,7 @@ public enum SystemMessage: AnyMessage {
 public enum NotificationMessage: AnyMessage {
     
     /// Message sent to parent actor when one of its children gets terminated.
-    case terminated(actor: Actor)
+    case terminated(actor: ActorRef)
     
 }
 

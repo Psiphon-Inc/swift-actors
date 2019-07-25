@@ -28,7 +28,34 @@ public enum ActorErrors: Error {
     case timeout(message: String)
 }
 
-public protocol Actor: class {
+public protocol ActorRefFactory {
+    
+    @discardableResult
+    func spawn<T>(_ props: Props<T>, name: String) -> ActorRef where T: Actor
+    
+}
+
+public protocol ActorRef: class {
+    
+    var name: String { get }
+    
+    var path: String { get }
+    
+    var system: ActorSystem { get }
+    
+    func tell(message: SystemMessage)
+    
+    func tell(message: AnyMessage)
+    
+    /// Sends a message to actor referenced by self, setting sender to from actor.
+    func tell(message: AnyMessage, from actor: ActorRef)
+    
+}
+
+public protocol Actor: ActorRef, ActorRefFactory {
+    associatedtype ParamType
+    
+    init(_ param: ParamType)
     
     var context: ActorContext! { get set }
     
@@ -66,10 +93,18 @@ internal extension Actor {
 public extension Actor {
     
     var name: String {
-        get { return context.name }
+        return context.name
     }
     
-    func parent() -> Actor? {
+    var path: String {
+        return context.path
+    }
+    
+    var system: ActorSystem {
+        return context.system
+    }
+    
+    func parent() -> ActorContext? {
         return context.parent
     }
     
@@ -78,30 +113,34 @@ public extension Actor {
     }
     
     func tell(message: SystemMessage) {
-        context.enqueueMessage(message: .system(message: message), from: nil)
+        context.tell(message: message)
     }
     
     func tell(message: AnyMessage) {
-        context.enqueueMessage(message: .user(message: message), from: nil)
+        context.tell(message: message)
     }
     
     /// Sends a message to actor referenced by self, setting sender to from actor.
-    func tell(message: AnyMessage, from actor: Actor) {
-        context.enqueueMessage(message: .user(message: message), from: actor)
+    func tell(message: AnyMessage, from actor: ActorRef) {
+        context.tell(message: message, from: actor)
     }
     
     @discardableResult
-    func spawn<T>(name: String, actor childActor: T) -> T where T: Actor {
-        return context.spawn(name: name, actor: childActor)
+    func spawn<T>(_ props: Props<T>, name: String) -> ActorRef where T: Actor {
+        return context.spawn(props, name: name)
     }
 }
 
 infix operator ! : AssignmentPrecedence
 
-public func ! (lhs: Actor, rhs: AnyMessage) {
+public func ! (lhs: ActorRef, rhs: AnyMessage) {
     lhs.tell(message: rhs)
 }
 
-public func ! (lhs: Actor, rhs: (message: AnyMessage, sender: Actor)) {
+public func ! (lhs: ActorRef, rhs: SystemMessage) {
+    lhs.tell(message: rhs)
+}
+
+public func ! (lhs: ActorRef, rhs: (message: AnyMessage, sender: ActorRef)) {
     lhs.tell(message: rhs.message, from: rhs.sender)
 }

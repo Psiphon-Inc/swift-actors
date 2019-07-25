@@ -42,21 +42,24 @@ class ActorLifecycleTests: XCTestCase {
     
     /// Tests starting an actor after sending it a messages
     func testActorStartAfterSendingMessages() {
+        
         // Arrange
         class DelayedStart: Actor {
+            typealias ParamType = [XCTestExpectation]
+            
             var context: ActorContext!
             var expectations: [XCTestExpectation]
             
             lazy var receive = behavior { [unowned self] msg -> Receive in
-
+                
                 if let i = msg as? Int {
                     self.expectations[i].fulfill()
                 }
                 return .same
             }
             
-            init(_ e: [XCTestExpectation]) {
-                expectations = e
+            required init(_ param: ParamType) {
+                self.expectations = param
             }
         }
         
@@ -64,11 +67,16 @@ class ActorLifecycleTests: XCTestCase {
         let delayedStart = DelayedStart(expectations)
         
         // Act
-        delayedStart.bind(context: LocalActorContext(name: "delayedStart", system: system, actor: delayedStart))
+        let context = LocalActorContext(name: "delayedStart",
+                                        system: system,
+                                        actor: delayedStart,
+                                        parent: nil)
+        delayedStart.bind(context: context)
+        
         for i in 0..<10 {
             delayedStart ! i
         }
-        delayedStart.context.start()
+        context.start()
         
         // Assert
         wait(for: expectations, timeout: 1, enforceOrder: true)
@@ -78,6 +86,8 @@ class ActorLifecycleTests: XCTestCase {
     func testActorNeverStarted() {
         // Arrange
         class TestActor: Actor {
+            typealias ParamType = XCTestExpectation
+            
             var context: ActorContext!
             let expect: XCTestExpectation
             
@@ -86,8 +96,8 @@ class ActorLifecycleTests: XCTestCase {
                 return .same
             }
             
-            init(_ e: XCTestExpectation) {
-                expect = e
+            required init(_ param: XCTestExpectation) {
+                self.expect = param
             }
         }
         
@@ -96,7 +106,11 @@ class ActorLifecycleTests: XCTestCase {
         let testActor = TestActor(expect)
         
         // Act
-        testActor.bind(context: LocalActorContext(name: "testActor", system: system, actor: testActor))
+        let context = LocalActorContext(name: "testActorNeverStarted",
+                                        system: system,
+                                        actor: testActor,
+                                        parent: nil)
+        testActor.bind(context: context)
         testActor ! "someMessage"  // Message should not be processed.
         
         // Assert
@@ -107,6 +121,8 @@ class ActorLifecycleTests: XCTestCase {
     func testPreStartCallback() {
         // Arrange
         class ActorWithPreStart: Actor {
+            typealias ParamType = XCTestExpectation
+            
             var context: ActorContext!
             var preStartValue: String = "notStarted"
             let expect: XCTestExpectation
@@ -120,8 +136,8 @@ class ActorLifecycleTests: XCTestCase {
                 expect.fulfill()
             }
             
-            init(_ e: XCTestExpectation) {
-                expect = e
+            required init(_ param: XCTestExpectation) {
+                self.expect = param
             }
         }
         
@@ -129,7 +145,7 @@ class ActorLifecycleTests: XCTestCase {
         
         // `preStart` should not be called until after actor is started.
         let actor = ActorWithPreStart(preStartExpect)
-        let context = LocalActorContext(name: "actor", system: system, actor: actor)
+        let context = LocalActorContext(name: "actor", system: system, actor: actor, parent: nil)
         
         // Act & Assert
         actor.bind(context: context)
@@ -150,14 +166,16 @@ class ActorLifecycleTests: XCTestCase {
         // Arrange
         /// Fulfills expectation when `postStop` callback is called.
         class ActorWithPostStop: Actor {
+            typealias ParamType = [XCTestExpectation?]
+            
             var context: ActorContext!
             
             let postStopExpect: XCTestExpectation
             let preStartExpect: XCTestExpectation?
             
-            init(postStop: XCTestExpectation, preStart: XCTestExpectation?) {
-                postStopExpect = postStop
-                preStartExpect = preStart
+            required init(_ param: [XCTestExpectation?]) {
+                postStopExpect = param[0]!
+                preStartExpect = param[1]
             }
             
             lazy var receive = behavior { [unowned self] msg -> Receive in
@@ -176,8 +194,8 @@ class ActorLifecycleTests: XCTestCase {
         
         let preStartExpect = waitForStart ? expectation(description: "preStart") : nil
         let postStopExpect = expectation(description: "postStop")
-        let actor = ActorWithPostStop(postStop: postStopExpect, preStart: preStartExpect)
-        let context = LocalActorContext(name: "postStopActor", system: system, actor: actor)
+        let actor = ActorWithPostStop([postStopExpect, preStartExpect])
+        let context = LocalActorContext(name: "postStopActor", system: system, actor: actor, parent: nil)
         
         // Act
         actor.bind(context: context)
@@ -223,12 +241,13 @@ class ActorLifecycleTests: XCTestCase {
         }
         
         class TestActor: Actor {
+            typealias ParamType = Void
+            
             var context: ActorContext!
             var counter: Int = 0
             
             lazy var receive = behavior { [unowned self] msg -> Receive in
-                
-                XCTAssert((self.context as! LocalActorContext).state == .started)
+                XCTAssert((self.context as! LocalActorContext<TestActor>).state == .started)
                 
                 guard let msg = msg as? Action else {
                     XCTFail()
@@ -247,13 +266,16 @@ class ActorLifecycleTests: XCTestCase {
                 }
                 return .same
             }
+            
+            required init(_ param: Void) {}
         }
         
         // Goes through different ways of stopping.
         for testNum in 1...3 {
             
             // Act
-            let actor = system.spawn(name: "testActor\(testNum)", actor: TestActor())
+            let actor = system.spawn(Props(TestActor.self, param: ()),
+                                     name: "testActor\(testNum)")
             actor ! Action.increment
             
             switch testNum {
@@ -262,7 +284,7 @@ class ActorLifecycleTests: XCTestCase {
             case 2:
                 actor ! Action.contextStop
             case 3:
-                actor.stop()
+                actor ! SystemMessage.poisonPill
             default:
                 XCTFail()
             }
@@ -271,10 +293,10 @@ class ActorLifecycleTests: XCTestCase {
             for _ in 1...1000 {
                 actor ! Action.shouldNotProcess
             }
-
+            
             // wait (TODO: once actor watcher is implemented, this needs to be removed)
-
-            let actorContext = actor.context as! LocalActorContext
+            
+            let actorContext = (actor as! TestActor).context as! LocalActorContext<TestActor>
             repeat {
                 Thread.sleep(forTimeInterval: 0.1)
             } while actorContext.state != .stopped
@@ -287,7 +309,7 @@ class ActorLifecycleTests: XCTestCase {
             switch testNum {
             case 1, 2:
                 XCTAssert(actorContext.mailbox.stopped == true)
-                XCTAssert(actor.counter == 1, "actor counter is \(actor.counter) - test \(testNum)")
+                XCTAssert((actor as! TestActor).counter == 1, "actor counter is \((actor as! TestActor).counter) - test \(testNum)")
             default: break
             }
         }

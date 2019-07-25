@@ -19,12 +19,16 @@
 
 import Foundation
 
-class RootActor: Actor {
-    var context: ActorContext!
+public class RootActor: Actor {
+    public typealias ParamType = Void
+    
+    public var context: ActorContext!
     
     var stopGroup: DispatchGroup?
     
-    lazy var receive = behavior { [unowned self] msg -> Receive in
+    public required init(_ param: Void) {}
+    
+    public lazy var receive = behavior { [unowned self] msg -> Receive in
         return .same
     }
     
@@ -34,14 +38,14 @@ class RootActor: Actor {
         stop()
     }
     
-    func postStop() {
+    public func postStop() {
         stopGroup?.leave()
     }
     
 }
 
 /// ActorSystem
-public class ActorSystem {
+public class ActorSystem: ActorRefFactory {
     
     let name: String
     private var root: RootActor!
@@ -50,17 +54,24 @@ public class ActorSystem {
     
     /// A reverse-DNS naming style (e.g. "com.example") is recommended. All actors within this
     /// actor system will be prefixed with this label.
-    public init(name: String) {
+    public init<T: ActorLifecycleContext>(name: String, contextType: T.Type) where T.ActorType == RootActor {
         dispatch = DispatchQueue(label: "\(name)$dispatch", target: DispatchQueue.global())
         self.name = name
-        self.root = RootActor()
-        self.root.bind(context: LocalActorContext(name: name, parentPath: "", system: self, actor: root))
-        self.root.context.start()
+        self.root = RootActor(())
+        
+        let rootContext = contextType.init(name: name, system: self, actor: root, parent: nil)
+        self.root.bind(context: rootContext)
+        
+        rootContext.start()
+    }
+    
+    public convenience init(name: String) {
+        self.init(name: name, contextType: LocalActorContext.self)
     }
     
     @discardableResult
-    public func spawn<T: Actor>(name: String, actor: T) -> T {
-        return root.context.spawn(name: name, actor: actor)
+    public func spawn<T>(_ props: Props<T>, name: String) -> ActorRef where T: Actor {
+        return root.spawn(props, name: name)
     }
     
     /// Stop blocks until all actors in the sytem have stopped.

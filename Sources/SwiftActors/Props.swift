@@ -19,28 +19,12 @@
 
 import Foundation
 
-public enum Receive {
-    case unhandled(AnyMessage)
-    case new(Behavior)
-    case same
-    case stop
-}
-
-public typealias Behavior = (Receive) throws -> Receive
-
-public func behavior(_ processor: @escaping (AnyMessage) throws -> Receive) -> Behavior {
-    return { r -> Receive in
-        if case let .unhandled(msg) = r {
-            return try processor(msg)
-        }
-        return r
+public struct Props<T: Actor> {
+    let cls: T.Type
+    let param: T.ParamType
+    
+    public init(_ cls: T.Type, param: T.ParamType) {
+        self.cls = cls
+        self.param = param
     }
-}
-
-infix operator | :TernaryPrecedence
-
-/// Pipeline operator for composing `Behavior`s.
-/// - Note: `|` is right associative.
-public func | (lhs: @escaping Behavior, rhs: @escaping Behavior) -> Behavior {
-    return { try lhs(try rhs($0)) }
 }
