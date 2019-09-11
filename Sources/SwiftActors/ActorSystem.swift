@@ -54,11 +54,10 @@ public class ActorSystem: ActorRefFactory {
     
     /// A reverse-DNS naming style (e.g. "com.example") is recommended. All actors within this
     /// actor system will be prefixed with this label.
-    public init<T: ActorLifecycleContext>(name: String, contextType: T.Type) where T.ActorType == RootActor {
+    public init<T: ActorTypedContext>(name: String, contextType: T.Type) where T.ActorType == RootActor {
         dispatch = DispatchQueue(label: "\(name)$dispatch", target: DispatchQueue.global())
         self.name = name
         self.root = RootActor(())
-        
         let rootContext = contextType.init(name: name, system: self, actor: root, parent: nil)
         self.root.bind(context: rootContext)
         

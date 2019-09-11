@@ -104,7 +104,7 @@ public extension Actor {
         return context.system
     }
     
-    func parent() -> ActorContext? {
+    func parent() -> ActorRef? {
         return context.parent
     }
     
