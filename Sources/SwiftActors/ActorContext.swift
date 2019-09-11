@@ -44,7 +44,7 @@ public protocol ActorContext: ActorRef, ActorRefFactory {
     var name: String { get }
     
     var parent: ActorRef? { get }
-
+    
     var children: [String: ActorRef] { get }
     
     var system: ActorSystem { get }
@@ -59,6 +59,8 @@ public protocol ActorContext: ActorRef, ActorRefFactory {
     func spawn<T>(_ props: Props<T>, name: String) -> ActorRef where T: Actor
     
     func unhandled() throws
+    
+    func watch(_ child: ActorRef)
     
 }
 
@@ -79,44 +81,44 @@ extension ActorContext {
 }
 
 public protocol ActorLifecycleContext: ActorContext {
-
+    
     var actorRef: ActorRef? { get }
-
+    
     func start()
     
     func stop(child: ActorRef)
-
+    
     func childStopped(_ child: ActorRef)
 }
 
 public protocol ActorTypedContext: ActorLifecycleContext {
-
+    
     associatedtype ActorType: Actor
-
+    
     init(name: String, system: ActorSystem, actor: ActorType, parent: ActorLifecycleContext?)
-
+    
 }
 
 public class LocalActorContext<ActorType: Actor>: ActorTypedContext {
-
+    
     public let path: String
     public let name: String
     public unowned var system: ActorSystem
-
+    
     public var actorRef: ActorRef? {
         return actor
     }
-
+    
     public unowned var parent: ActorRef? {
         return parentContext?.actorRef
     }
-
+    
     public var children: [String: ActorRef] {
         return childrenContexts.mapValues {
             return $0.actorRef!
         }
     }
-
+    
     var actor: ActorType?
     
     let mailbox: Mailbox<MessageContext>
@@ -125,11 +127,12 @@ public class LocalActorContext<ActorType: Actor>: ActorTypedContext {
     var currentMessage: MessageContext?
     var behavior: Behavior!
     var state: ActorState
-
+    var watchGroup: [ActorRef] = []
+    
     // LocalActorContext specific fields
     private var childrenContexts = [String: ActorLifecycleContext]()
     private var parentContext: ActorLifecycleContext?
-
+    
     public required init(name: String, system: ActorSystem, actor: ActorType,
                          parent: ActorLifecycleContext?) {
         
@@ -190,9 +193,10 @@ public class LocalActorContext<ActorType: Actor>: ActorTypedContext {
                     preconditionFailure()
                 }
                 self.actor!.postStop()
+                self.parentContext?.childStopped(self.actor!)
                 self.actor = .none
+                
                 self.state = .stopped
-                self.parentContext?.childStopped(self)
             }
         }
     }
@@ -241,17 +245,44 @@ public class LocalActorContext<ActorType: Actor>: ActorTypedContext {
         let msgContext = MessageContext(message: message, sender: actor)
         mailbox.enqueue(msgContext)
     }
-
+    
     public func childStopped(_ child: ActorRef) {
         dispatch.asyncHighPriority {
             guard self.childrenContexts.removeValue(forKey: child.name) != nil else {
                 preconditionFailure("child actor '\(child.name)' does not exist")
             }
+            
+            // If child is part of the watch group, send message to self.
+            let watchedChildInd = self.watchGroup.firstIndex { $0 === child }
+            
+            if let index = watchedChildInd {
+                self.watchGroup.remove(at: index)
+                
+                self.tell(message: NotificationMessage.terminated(actor: child))
+            }
+            
             if self.state == .stopping {
                 self.waitGroup.leave()
             }
         }
     }
+    
+    public func watch(_ child: ActorRef) {
+        dispatch.asyncHighPriority {
+            guard self.childrenContexts.keys.contains(child.name) else {
+                preconditionFailure("actor \(child.name) is not a a child of \(self.path)")
+            }
+            
+            let alreadyWatched = self.watchGroup.contains { $0 === child }
+            
+            guard !alreadyWatched else {
+                return
+            }
+            
+            self.watchGroup.append(child)
+        }
+    }
+    
 }
 
 extension LocalActorContext: MailboxOwner {
