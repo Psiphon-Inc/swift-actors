@@ -95,7 +95,8 @@ public protocol ActorTypedContext: ActorLifecycleContext {
     
     associatedtype ActorType: Actor
     
-    init(name: String, system: ActorSystem, actor: ActorType, parent: ActorLifecycleContext?)
+    init(name: String, system: ActorSystem, actor: ActorType, parent: ActorLifecycleContext?,
+         qos: DispatchQoS.QoSClass)
     
 }
 
@@ -134,7 +135,7 @@ public class LocalActorContext<ActorType: Actor>: ActorTypedContext {
     private var parentContext: ActorLifecycleContext?
     
     public required init(name: String, system: ActorSystem, actor: ActorType,
-                         parent: ActorLifecycleContext?) {
+                         parent: ActorLifecycleContext?, qos: DispatchQoS.QoSClass = .default) {
         
         self.name = name
         if let parent = parent {
@@ -145,12 +146,15 @@ public class LocalActorContext<ActorType: Actor>: ActorTypedContext {
         self.system = system
         self.parentContext = parent
         self.actor = actor
-        dispatch = PriorityDispatch(label: self.path)
+        self.dispatch = PriorityDispatch(label: self.path, qos: qos)
         waitGroup = DispatchGroup()
         currentMessage = nil
         behavior = actor.receive
         state = .spawned
-        mailbox = Mailbox(label: name)
+        
+        /// Mailbox has the same QoS as the actor.
+        mailbox = Mailbox(label: name, qos: qos)
+        
     }
     
     public func sender() -> ActorRef? {
@@ -214,7 +218,7 @@ public class LocalActorContext<ActorType: Actor>: ActorTypedContext {
     public func spawn<T>(_ props: Props<T>, name: String) -> ActorRef where T : Actor {
         let child = props.cls.init(props.param)
         let childCtx = LocalActorContext<T>(name: name, system: self.system,
-                                            actor: child, parent: self)
+                                            actor: child, parent: self, qos: props.qos)
         child.bind(context: childCtx)
         
         dispatch.asyncHighPriority {

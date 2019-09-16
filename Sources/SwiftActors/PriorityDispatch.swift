@@ -24,18 +24,21 @@ public final class PriorityDispatch {
     let defaultPriorityDispatch: DispatchQueue
     let highPriorityDispatch: DispatchQueue
     
-    init(label: String) {
-        highPriorityDispatch = DispatchQueue(label: "\(label)$high", target: DispatchQueue.global())
+    init(label: String, qos: DispatchQoS.QoSClass) {
+        highPriorityDispatch = DispatchQueue(label: "\(label)$high",
+            target: DispatchQueue.global(qos: qos))
         defaultPriorityDispatch = DispatchQueue(label: label, target: highPriorityDispatch)
     }
     
-    // Executes `work` synchronously with default priority.
+    /// Executes `work` synchronously with default priority.
+    /// - Note: Calling this function and targeting the current queue results in a deadlock.
     func sync<T>(execute work: () -> T) -> T {
         return defaultPriorityDispatch.sync(execute: work)
     }
-    
+
     /// Pauses default priority queue, and synchronously executes `work` on high priority queue
     /// before resuming default priority queue.
+    /// - Note: Calling this function and targeting the current queue results in a deadlock.
     func syncHighPriority<T>(execute work: () -> T) -> T {
         defaultPriorityDispatch.suspend()
         return highPriorityDispatch.sync {

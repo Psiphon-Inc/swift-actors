@@ -58,7 +58,8 @@ public class ActorSystem: ActorRefFactory {
         dispatch = DispatchQueue(label: "\(name)$dispatch", target: DispatchQueue.global())
         self.name = name
         self.root = RootActor(())
-        let rootContext = contextType.init(name: name, system: self, actor: root, parent: nil)
+        let rootContext = contextType.init(name: name, system: self, actor: root, parent: nil,
+                                           qos: .default)
         self.root.bind(context: rootContext)
         
         rootContext.start()

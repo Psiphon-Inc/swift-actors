@@ -32,8 +32,8 @@ final class Mailbox<T> {
     var stopped: Bool
     var suspendCount = 0
     
-    init(label: String) {
-        mailboxDispatch = PriorityDispatch(label: "\(label)$mailbox")
+    init(label: String, qos: DispatchQoS.QoSClass) {
+        mailboxDispatch = PriorityDispatch(label: "\(label)$mailbox", qos: qos)
         queue = Queue()
         stopped = false
     }
@@ -49,7 +49,7 @@ final class Mailbox<T> {
     
     /// - Note: Messages are dropped after the mailbox is stopped.
     func enqueue(_ item: T) {
-        mailboxDispatch.sync {
+        mailboxDispatch.async {
             precondition(self.suspendCount == 0 || self.suspendCount == 1, "suspend count is \(self.suspendCount)")
             
             if self.stopped {

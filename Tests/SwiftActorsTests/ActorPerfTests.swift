@@ -118,7 +118,7 @@ class ActorPerfTests: XCTestCase {
         }
         
         // Act
-        let actor = system.spawn(Props(MultipleMsg.self, param:()), name: "multiple")
+        let actor = system.spawn(Props(MultipleMsg.self, param:(), qos: .userInteractive), name: "multiple")
         
         self.measure {
             let count = 10_000
