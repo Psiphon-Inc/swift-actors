@@ -23,7 +23,7 @@ public struct Props<T: Actor> {
     let cls: T.Type
     let param: T.ParamType
     let qos: DispatchQoS.QoSClass
-    
+
     public init(_ cls: T.Type, param: T.ParamType,
                 qos: DispatchQoS.QoSClass = .default) {
         self.cls = cls
@@ -31,3 +31,4 @@ public struct Props<T: Actor> {
         self.qos = qos
     }
 }
+

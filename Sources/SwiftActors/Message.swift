@@ -22,16 +22,16 @@ import Foundation
 public protocol AnyMessage {}
 
 public enum SystemMessage: AnyMessage {
-    
+
     /// Poison Pill message is like a regular message, but stops the actor immediately when it is processed.
     case poisonPill
 }
 
 public enum NotificationMessage: AnyMessage {
-    
+
     /// Message sent to parent actor when one of its children gets terminated.
     case terminated(actor: ActorRef)
-    
+
 }
 
 // Supported message types
@@ -39,3 +39,4 @@ public enum NotificationMessage: AnyMessage {
 extension String: AnyMessage {}
 
 extension Int: AnyMessage {}
+

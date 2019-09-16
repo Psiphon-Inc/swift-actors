@@ -24,9 +24,10 @@ public protocol Ordinal: Comparable where Self: RawRepresentable, RawValue: Comp
 infix operator <
 
 public extension Ordinal  {
-    
+
     static func < (lhs: Self, rhs: Self) -> Bool {
         return lhs.rawValue < rhs.rawValue
     }
-    
+
 }
+

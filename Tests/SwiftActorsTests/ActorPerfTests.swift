@@ -21,18 +21,18 @@ import XCTest
 @testable import SwiftActors
 
 class ActorPerfTests: XCTestCase {
-    
+
     var system: ActorSystem!
-    
+
     override func setUp() {
         system = ActorSystem(name: "system")
     }
-    
+
     override func tearDown() {
         system.stop()
         system = nil
     }
-    
+
     // Trying to estimate overhead of waiting on fulfilled expectations.
     // Validity of subtracting the result of this test from `testMessageSendPerf` is TBD.
     func testFullfillTime() {
@@ -44,15 +44,15 @@ class ActorPerfTests: XCTestCase {
             i += 1
         }
     }
-    
+
     func testMessageSendPerf() {
         // Arrange
         class MultipleMsg: Actor {
             typealias ParamType = [XCTestExpectation]
-            
+
             let expects: [XCTestExpectation]
             var context: ActorContext!
-            
+
             lazy var receive = behavior { [unowned self] msg -> Receive in
                 guard let msg = msg as? Int else {
                     XCTFail()
@@ -61,12 +61,12 @@ class ActorPerfTests: XCTestCase {
                 self.expects[msg].fulfill()
                 return .same
             }
-            
+
             required init(_ param: [XCTestExpectation]) {
                 self.expects = param
             }
         }
-        
+
         let expects = [ expectation(description: "0"),
                         expectation(description: "1"),
                         expectation(description: "2"),
@@ -77,18 +77,18 @@ class ActorPerfTests: XCTestCase {
                         expectation(description: "7"),
                         expectation(description: "8"),
                         expectation(description: "9") ]
-        
+
         // Act
         let actor = system.spawn(Props(MultipleMsg.self, param: expects), name: "multiple")
         var i = 0
-        
+
         self.measure {
             actor.tell(message: i)
             wait(for: [expects[i]], timeout: 1)  // Assert
             i += 1
         }
     }
-    
+
     func testMessageSendPerf2() {
         // Arrange
         enum Action: AnyMessage {
@@ -98,10 +98,10 @@ class ActorPerfTests: XCTestCase {
         }
         class MultipleMsg: Actor {
             typealias ParamType = Void
-            
+
             var context: ActorContext!
             var count = 0
-            
+
             lazy var receive = behavior { [unowned self] msg -> Receive in
                 switch msg as! Action {
                 case .reset:
@@ -113,21 +113,21 @@ class ActorPerfTests: XCTestCase {
                 }
                 return .same
             }
-            
+
             required init(_ param: Void) {}
         }
-        
+
         // Act
         let actor = system.spawn(Props(MultipleMsg.self, param:(), qos: .userInteractive), name: "multiple")
-        
+
         self.measure {
             let count = 10_000
-            
+
             actor ! Action.reset
             for _ in 1...count {
                 actor ! (Action.increment, actor)
             }
-            
+
             let doneExpectation = expectation(description: "done")
             actor ! Action.done(doneExpectation)
             wait(for: [doneExpectation], timeout: 10)
@@ -135,5 +135,6 @@ class ActorPerfTests: XCTestCase {
         }
         print("done")
     }
-    
+
 }
+
