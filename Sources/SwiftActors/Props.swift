@@ -22,9 +22,13 @@ import Foundation
 public struct Props<T: Actor> {
     let cls: T.Type
     let param: T.ParamType
-    
-    public init(_ cls: T.Type, param: T.ParamType) {
+    let qos: DispatchQoS.QoSClass
+
+    public init(_ cls: T.Type, param: T.ParamType,
+                qos: DispatchQoS.QoSClass = .default) {
         self.cls = cls
         self.param = param
+        self.qos = qos
     }
 }
+

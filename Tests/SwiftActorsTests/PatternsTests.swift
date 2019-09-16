@@ -21,23 +21,23 @@ import XCTest
 import SwiftActors
 
 class PatternsTests: XCTestCase {
-    
+
     var system: ActorSystem!
-    
+
     override func setUp() {
         system = ActorSystem(name: "system")
     }
-    
+
     override func tearDown() {
         system.stop()
         system = nil
     }
-    
+
     func testAskPatternBasicFunctionality() {
         // Arrange
         let echo = system.spawn(echoActorProps, name: "echo")
         let done = expectation(description: "testDone")
-        
+
         // Act
         ask(actor: echo, message: 1).then { result in
             // Assert
@@ -48,15 +48,15 @@ class PatternsTests: XCTestCase {
             XCTAssert(result == 2)
             done.fulfill()
         }
-        
+
         wait(for: [done], timeout: 1)
     }
-    
+
     func testAskPatternTimeout() {
         // Arrange
         let echo = system.spawn(echoActorProps, name: "echo")
         let done = expectation(description: "testDone")
-        
+
         // Act
         let msg = EchoActor.Action.respondWithDelay(interval: 0.2, value: 1)
         ask(actor: echo, message: msg, timeoutMillis: 100).catch { err in
@@ -67,15 +67,15 @@ class PatternsTests: XCTestCase {
                 XCTFail()
             }
         }
-        
+
         wait(for: [done], timeout: 1)
     }
-    
+
     func testBangBangOperator() {
         // Arrange
         let echo = system.spawn(echoActorProps, name: "echo")
         let done = expectation(description: "testDone")
-        
+
         // Act
         (echo ?! 1).then { result in
             // Assert
@@ -86,15 +86,15 @@ class PatternsTests: XCTestCase {
             XCTAssert(result == 2)
             done.fulfill()
         }
-        
+
         wait(for: [done], timeout: 1)
     }
-    
+
     func testBangBangOperatorWithTimeout() {
         // Arrange
         let echo = system.spawn(echoActorProps, name: "echo")
         let done = expectation(description: "testDone")
-        
+
         // Act
         let msg = EchoActor.Action.respondWithDelay(interval: 0.2, value: 1)
         (echo ?! (msg, 100)).catch { err in
@@ -105,8 +105,9 @@ class PatternsTests: XCTestCase {
                 XCTFail()
             }
         }
-        
+
         wait(for: [done], timeout: 1)
     }
-    
+
 }
+

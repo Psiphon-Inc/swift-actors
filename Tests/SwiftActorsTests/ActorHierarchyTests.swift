@@ -287,4 +287,88 @@ class ActorHierarchyTests: XCTestCase {
              timeout: 1, enforceOrder: true)
     }
 
+    func testWatchChild() {
+        // Arrange
+
+        enum Action: AnyMessage {
+            case poisonChild(Int)
+        }
+
+        class ParentActor: Actor {
+            typealias ParamType = [XCTestExpectation]
+
+            var children: [ActorRef] = []
+            var context: ActorContext!
+            let expectations: [XCTestExpectation]
+
+            required init(_ param: ParamType) {
+                self.expectations = param
+            }
+
+            lazy var receive = behavior { [unowned self] in
+
+                switch $0 {
+                case let msg as Action:
+
+                    switch msg {
+                    case .poisonChild(let index):
+                        let child = self.children[index]
+                        child.tell(message: .poisonPill)
+
+                    }
+
+                case let msg as NotificationMessage:
+
+                    switch msg {
+                    case .terminated(let actor):
+                        let firstIndex = self.children.firstIndex { $0 === actor }
+
+                        guard let index = firstIndex else {
+                            XCTFail()
+                            return .unhandled(msg)
+                        }
+
+                        self.expectations[index].fulfill()
+                    }
+
+                default: return .unhandled($0)
+                }
+
+
+                return .same
+            }
+
+            func preStart() {
+                children = (0..<5).map {
+                    spawn(echoActorProps, name: "child_\($0)")
+                }
+
+                for child in children {
+                    context.watch(child)
+                }
+
+            }
+        }
+
+        let expectations = (0..<5).map {
+            expectation(description: "stopped_child_\($0)")
+        }
+
+        let props = Props(ParentActor.self,
+                          param: expectations)
+
+        let parent = system.spawn(props, name: "parent")
+
+        // Act
+        for i in 0..<5 {
+            parent ! Action.poisonChild(i)
+        }
+
+        // Assert
+        // Note that children may not stop in order of poison, if running on different
+        // dispatch queues.
+        wait(for: expectations, timeout: 1)
+    }
+
 }
+

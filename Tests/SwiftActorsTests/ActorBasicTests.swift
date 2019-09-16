@@ -28,13 +28,13 @@ class NoOpActor: Actor {
     typealias ParamType = Void
 
     var context: ActorContext!
-    
+
     lazy var receive = behavior { [unowned self] msg -> Receive in
         guard let msg = msg as? XCTestExpectation else {
             XCTFail()
             return .same
         }
-        
+
         msg.fulfill()
         return .same
     }
@@ -47,11 +47,11 @@ let noopActorProps = Props(NoOpActor.self, param: ())
 final class ActorBasicTests: XCTestCase {
 
     var system: ActorSystem!
-    
+
     override func setUp() {
         system = ActorSystem(name: "system")
     }
-    
+
     override func tearDown() {
         system.stop()
         system = nil
@@ -60,19 +60,19 @@ final class ActorBasicTests: XCTestCase {
     func testOneMessageSend() {
         // Arrange
         let expect = expectation(description: "receive message")
-        
+
         // Act
         let ref = system.spawn(noopActorProps, name: "testOneMessageSend")
         ref.tell(message: expect)
-        
+
         // Assert
         wait(for: [expect], timeout: 1)
     }
-    
+
     func testMultipleMessageSend() {
         // Arrange
         var expectations = [XCTestExpectation]()
-        
+
         // Act
         let ref = system.spawn(noopActorProps, name: "testActor")
         for _ in 1...10 {
@@ -80,25 +80,25 @@ final class ActorBasicTests: XCTestCase {
             expectations.append(expect)
             ref.tell(message: expect)
         }
-        
+
         // Assert
         wait(for: expectations, timeout: 1, enforceOrder: true)
     }
-    
+
     func testMessageSendActorToActor() {
         // Arrange
         enum Forwarding: AnyMessage {
             case forward(to: ActorRef)
         }
-        
+
         class ForwardingActor: Actor {
             typealias ParamType = [XCTestExpectation]
 
             let forwardExpect: XCTestExpectation
             let noopExpect: XCTestExpectation
-            
+
             var context: ActorContext!
-            
+
             lazy var receive = behavior { [unowned self] msg -> Receive in
                 switch msg as! Forwarding {
                 case .forward(to: let noopActor):
@@ -122,12 +122,12 @@ final class ActorBasicTests: XCTestCase {
 
         // Act
         let forwardingActor = system.spawn(props, name: "forwarding")
-        
+
         let noopActor = system.spawn(noopActorProps, name: "noop")
-        
+
         // Sends first message to forwarding actor
         forwardingActor.tell(message: Forwarding.forward(to: noopActor))
-        
+
         // Assert
         wait(for: props.param, timeout: 1, enforceOrder: true)
     }
@@ -139,12 +139,12 @@ final class ActorBasicTests: XCTestCase {
                              expectation(description: "B3"),
                              expectation(description: "A4"),
                              expectation(description: "B5")]
-        
+
         enum SwitchAction: AnyMessage {
             case behaviorA(Int)
             case behaviorB(Int)
         }
-        
+
         class Switcher: Actor {
             typealias ParamType = Void
 
@@ -159,12 +159,12 @@ final class ActorBasicTests: XCTestCase {
                     XCTFail()
                     return .same
                 }
-                
+
                 guard let msg = msg as? SwitchAction else {
                     XCTFail()
                     return .same
                 }
-                
+
                 switch msg {
                 case .behaviorA(let num):
                     sender.tell(message: "A\(num)", from: self)
@@ -174,19 +174,19 @@ final class ActorBasicTests: XCTestCase {
                     return .new(self.behaviorB)
                 }
             }
-            
+
             lazy var behaviorB = behavior { [unowned self] msg -> Receive in
-                
+
                 guard let sender = self.context.sender() else {
                     XCTFail()
                     return .same
                 }
-                
+
                 guard let msg = msg as? SwitchAction else {
                     XCTFail()
                     return .same
                 }
-                
+
                 switch msg {
                 case .behaviorA(let num):
                     sender.tell(message: "B\(num)", from: self)
@@ -196,12 +196,12 @@ final class ActorBasicTests: XCTestCase {
                     return .same
                 }
             }
-            
+
             lazy var receive = self.behaviorA
 
             required init(_ param: Void) {}
         }
-        
+
         class TestActor: Actor {
 
             struct Params {
@@ -263,10 +263,10 @@ final class ActorBasicTests: XCTestCase {
                                                             switcher: switcher))
 
         system.spawn(testActorProps, name: "testActor")
-        
+
         wait(for: expectations, timeout: 1, enforceOrder: true)
     }
-    
+
     func testReceiveUnhandledBehavior() {
 
         // Arrange
@@ -538,3 +538,4 @@ final class ActorBasicTests: XCTestCase {
     }
 
 }
+

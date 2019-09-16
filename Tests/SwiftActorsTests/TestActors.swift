@@ -25,13 +25,13 @@ let echoActorProps = Props(EchoActor.self, param: ())
 
 class EchoActor: Actor {
     typealias ParamType = Void
-    
+
     enum Action: AnyMessage {
         case respondWithDelay(interval: TimeInterval, value: Int)
     }
-    
+
     var context: ActorContext!
-    
+
     lazy var receive = behavior { [unowned self] msg -> Receive in
         switch msg {
         case let msg as String:
@@ -44,14 +44,15 @@ class EchoActor: Actor {
                 Thread.sleep(forTimeInterval: delay)
                 self.context.sender()!.tell(message: value + 1)
             }
-            
+
         default:
             self.context.sender()!.tell(message: msg)
         }
-        
+
         return .same
     }
-    
+
     required init(_ param: Void) {}
-    
+
 }
+

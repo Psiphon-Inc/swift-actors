@@ -43,15 +43,15 @@ struct AskActorParam {
 
 class AskActor: Actor {
     typealias ParamType = AskActorParam
-    
+
     var context: ActorContext!
     let params: AskActorParam
-    
+
     lazy var receive = behavior { [unowned self] in
         defer {
             self.params.timer.cancel()
         }
-        
+
         // On timeout rejects promise, otherwise the promise is fulfilled.
         if let msg = $0 as? Ask {
             switch msg {
@@ -63,21 +63,21 @@ class AskActor: Actor {
         } else {
             self.params.promise.fulfill($0)
         }
-        
+
         return .stop
     }
-    
+
     required init(_ param: AskActorParam) {
         self.params = param
     }
-    
+
     func preStart() {
         // TODO This is fired on some background queue. For less resource waste we can fire this on mailbox dispatch queue.
         params.timer.setEventHandler { [unowned self] in
             self ! Ask.timeout
         }
         params.timer.resume()
-        
+
         // Sends message after activating the timer to ensure that timer doesn't get cancelled
         // before getting activated. Although this is highly unlikely.
         params.receiver ! (params.message, self)
@@ -89,13 +89,14 @@ public func ask(actor: ActorRef, message: AnyMessage, timeoutMillis: Int = 5000)
     let promise = Promise<Any>.pending()
     let timer = DispatchSource.makeTimerSource()
     timer.schedule(deadline: .now() + DispatchTimeInterval.milliseconds(timeoutMillis))
-    
-    
+
+
     let props = Props(AskActor.self,
                       param: AskActorParam(promise: promise, timer: timer,
                                             message: message, receiver: actor))
-    
+
     actor.system.spawn(props, name: "ask.\(actor.name).\(uid)")
-    
+
     return promise
 }
+

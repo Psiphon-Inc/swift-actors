@@ -44,3 +44,4 @@ infix operator | :TernaryPrecedence
 public func | (lhs: @escaping Behavior, rhs: @escaping Behavior) -> Behavior {
     return { try lhs(try rhs($0)) }
 }
+
