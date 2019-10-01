@@ -247,11 +247,11 @@ final class ActorBasicTests: XCTestCase {
 
             func preStart() {
                 // starting behavior for switch is  is `behaviorA`
-                switcher.tell(message: SwitchAction.behaviorA(1), from: self) // should respond A1
-                switcher.tell(message: SwitchAction.behaviorB(2), from: self) // should respond A2
-                switcher.tell(message: SwitchAction.behaviorA(3), from: self) // should respond B3
-                switcher.tell(message: SwitchAction.behaviorB(4), from: self) // should respond A4
-                switcher.tell(message: SwitchAction.behaviorB(5), from: self) // should respond B5
+                switcher.tell(message: SwitchAction.behaviorA(1)) // should respond A1
+                switcher.tell(message: SwitchAction.behaviorB(2)) // should respond A2
+                switcher.tell(message: SwitchAction.behaviorA(3)) // should respond B3
+                switcher.tell(message: SwitchAction.behaviorB(4)) // should respond A4
+                switcher.tell(message: SwitchAction.behaviorB(5)) // should respond B5
             }
         }
 
@@ -360,7 +360,7 @@ final class ActorBasicTests: XCTestCase {
                 }
 
                 if msg == "echoChild" {
-                    self.child! ! ("messageToChild", self)
+                    self.child! ! "messageToChild"
                 }
                 if msg == "messageToChild" {
                     self.expect.fulfill()

@@ -24,12 +24,6 @@ public enum MessageKind {
     case user(message: AnyMessage)
 }
 
-/// Wraps a message sent to an actor with its context.
-struct MessageContext {
-    let message: MessageKind
-    let sender: ActorRef?
-}
-
 enum ActorState: Int, Ordinal {
     case spawned = 1
     case started
@@ -49,11 +43,9 @@ public protocol ActorContext: ActorRef, ActorRefFactory {
 
     var system: ActorSystem { get }
 
-    func sender() -> ActorRef?
-
     func stop()
 
-    func tell(message: MessageKind, from actor: ActorRef?)
+    func tell(message: MessageKind)
 
     @discardableResult
     func spawn<T>(_ props: Props<T>, name: String) -> ActorRef where T: Actor
@@ -67,15 +59,11 @@ public protocol ActorContext: ActorRef, ActorRefFactory {
 extension ActorContext {
 
     public func tell(message: AnyMessage) {
-        tell(message: .user(message: message), from: nil)
+        tell(message: .user(message: message))
     }
 
     public func tell(message: SystemMessage) {
-        tell(message: .system(message: message), from: nil)
-    }
-
-    public func tell(message: AnyMessage, from actor: ActorRef) {
-        tell(message: .user(message: message), from: actor)
+        tell(message: .system(message: message))
     }
 
 }
@@ -122,10 +110,10 @@ public class LocalActorContext<ActorType: Actor>: ActorTypedContext {
 
     var actor: ActorType?
 
-    let mailbox: Mailbox<MessageContext>
+    let mailbox: Mailbox<MessageKind>
     let dispatch: PriorityDispatch
     let waitGroup: DispatchGroup
-    var currentMessage: MessageContext?
+    var currentMessage: MessageKind?
     var behavior: Behavior!
     var state: ActorState
     var watchGroup: [ActorRef] = []
@@ -155,10 +143,6 @@ public class LocalActorContext<ActorType: Actor>: ActorTypedContext {
         /// Mailbox has the same QoS as the actor.
         mailbox = Mailbox(label: name, qos: qos)
 
-    }
-
-    public func sender() -> ActorRef? {
-        return currentMessage?.sender
     }
 
     public func start() {
@@ -242,12 +226,11 @@ public class LocalActorContext<ActorType: Actor>: ActorTypedContext {
     /// Can be called by actor's behavior when the message type that it received is not handled.
     public func unhandled() throws {
         throw ActorErrors.unhandled(message:
-            "message '\(String(describing: currentMessage!.message))' is not handled by '\(name)'")
+            "message '\(String(describing: currentMessage!))' is not handled by '\(name)'")
     }
 
-    public func tell(message: MessageKind, from actor: ActorRef?) {
-        let msgContext = MessageContext(message: message, sender: actor)
-        mailbox.enqueue(msgContext)
+    public func tell(message: MessageKind) {
+        mailbox.enqueue(message)
     }
 
     public func childStopped(_ child: ActorRef) {
@@ -301,17 +284,17 @@ extension LocalActorContext: MailboxOwner {
                 preconditionFailure("context behavior is not set")
             }
 
-            guard let msgContext = self.mailbox.dequeue() else {
+            guard let msg = self.mailbox.dequeue() else {
                 // Mailbox is empty.
                 return
             }
 
-            self.currentMessage = msgContext  // Set the new context
+            self.currentMessage = msg  // Set the new context
             defer {
                 self.currentMessage = nil
             }
 
-            switch msgContext.message {
+            switch msg {
             case .system(let sysMessage):
 
                 switch sysMessage {

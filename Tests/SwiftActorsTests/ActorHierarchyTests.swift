@@ -18,6 +18,7 @@
  */
 
 import XCTest
+import Promises
 @testable import SwiftActors
 
 class ActorHierarchyTests: XCTestCase {
@@ -55,7 +56,11 @@ class ActorHierarchyTests: XCTestCase {
                         self.expects[0].fulfill()
                     }
                     if msg == "pingParent" {
-                        self.parent()! ! (1, self)
+                        let promise = Promise<Int>.pending()
+                        self.parent()! ! EchoActor.Action.int(1, promise)
+                        promise.then { [unowned self] result in
+                            self ! result
+                        }
                     }
                 }
 

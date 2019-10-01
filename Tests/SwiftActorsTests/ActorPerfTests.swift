@@ -125,7 +125,7 @@ class ActorPerfTests: XCTestCase {
 
             actor ! Action.reset
             for _ in 1...count {
-                actor ! (Action.increment, actor)
+                actor ! Action.increment
             }
 
             let doneExpectation = expectation(description: "done")

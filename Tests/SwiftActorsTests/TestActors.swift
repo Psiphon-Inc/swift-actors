@@ -20,6 +20,7 @@
 import XCTest
 import Foundation
 import SwiftActors
+import Promises
 
 let echoActorProps = Props(EchoActor.self, param: ())
 
@@ -27,26 +28,30 @@ class EchoActor: Actor {
     typealias ParamType = Void
 
     enum Action: AnyMessage {
-        case respondWithDelay(interval: TimeInterval, value: Int)
+        case respondWithDelay(interval: TimeInterval, value: Int, fulfill: Promise<Int>)
+        case string(String, Promise<String>)
+        case int(Int, Promise<Int>)
     }
 
     var context: ActorContext!
 
-    lazy var receive = behavior { [unowned self] msg -> Receive in
-        switch msg {
-        case let msg as String:
-            self.context.sender()!.tell(message: msg)
-        case let msg as Int:
-            self.context.sender()!.tell(message: msg + 1)
-        case let action as Action:
-            switch action {
-            case .respondWithDelay(let delay, let value):
-                Thread.sleep(forTimeInterval: delay)
-                self.context.sender()!.tell(message: value + 1)
-            }
+    lazy var receive = behavior { [unowned self] in
 
-        default:
-            self.context.sender()!.tell(message: msg)
+        guard let msg = $0 as? Action else {
+            return .unhandled($0)
+        }
+
+        switch msg {
+
+        case .respondWithDelay(let interval, let value, let promise):
+            Thread.sleep(forTimeInterval: interval)
+            promise.fulfill(value + 1)
+
+        case .string(let value, let promise):
+            promise.fulfill(value)
+
+        case .int(let value, let promise):
+            promise.fulfill(value + 1)
         }
 
         return .same
