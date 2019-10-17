@@ -37,11 +37,11 @@ public func behavior(_ processor: @escaping (AnyMessage) throws -> Receive) -> B
     }
 }
 
-infix operator | :TernaryPrecedence
+infix operator <| :TernaryPrecedence
 
 /// Pipeline operator for composing `Behavior`s.
-/// - Note: `|` is right associative.
-public func | (lhs: @escaping Behavior, rhs: @escaping Behavior) -> Behavior {
+/// - Note: `<|` is right associative.
+public func <| (lhs: @escaping Behavior, rhs: @escaping Behavior) -> Behavior {
     return { try lhs(try rhs($0)) }
 }
 

@@ -20,7 +20,7 @@
 import XCTest
 @testable import SwiftActors
 
-infix operator |
+infix operator <|
 
 extension XCTestExpectation: AnyMessage {}
 
@@ -448,7 +448,7 @@ final class ActorBasicTests: XCTestCase {
 
                     if msg == "set10" {
                         self.counter = 10
-                        return .new(self.increment | self.decrement)
+                        return .new(self.increment <| self.decrement)
                     } else {
                         return .same
                     }
@@ -469,7 +469,7 @@ final class ActorBasicTests: XCTestCase {
                         if self.counter == 11 {
                             return .new(self.done)
                         } else {
-                            return .new(self.increment | self.decrement)
+                            return .new(self.increment <| self.decrement)
                         }
                     } else {
                         return .same
@@ -509,7 +509,7 @@ final class ActorBasicTests: XCTestCase {
                 }
             }
 
-            lazy var receive = self.set10 | self.decrement
+            lazy var receive = self.set10 <| self.decrement
 
             required init(_ param: ParamType) {
                 self.doneExpectation = param
