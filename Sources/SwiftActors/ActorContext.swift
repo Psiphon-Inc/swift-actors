@@ -100,7 +100,7 @@ public protocol ActorTypedContext: ActorLifecycleContext {
 
 }
 
-public class LocalActorContext<ActorType: Actor>: ActorTypedContext {
+public final class LocalActorContext<ActorType: Actor>: ActorTypedContext {
 
     public let path: String
     public let name: String
@@ -120,15 +120,16 @@ public class LocalActorContext<ActorType: Actor>: ActorTypedContext {
         }
     }
 
-    var actor: ActorType?
+    // TODO: make dispatch, state and mailbox private or fileprivate.
+    internal let dispatch: PriorityDispatch
+    internal var state: ActorState
+    internal let mailbox: Mailbox<MessageContext>
 
-    let mailbox: Mailbox<MessageContext>
-    let dispatch: PriorityDispatch
-    let waitGroup: DispatchGroup
-    var currentMessage: MessageContext?
-    var behavior: Behavior!
-    var state: ActorState
-    var watchGroup: [ActorRef] = []
+    private var actor: ActorType?
+    private let waitGroup: DispatchGroup
+    private var currentMessage: MessageContext?
+    private var behavior: Behavior!
+    private var watchGroup: [ActorRef] = []
 
     // LocalActorContext specific fields
     private var childrenContexts = [String: ActorLifecycleContext]()

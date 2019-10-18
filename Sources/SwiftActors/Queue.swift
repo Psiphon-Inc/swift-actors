@@ -20,8 +20,8 @@
 // THE SOFTWARE.
 
 public struct Queue<T> {
-    fileprivate var array = [T?]()
-    fileprivate var head = 0
+    private var array = [T?]()
+    private var head = 0
 
     public var isEmpty: Bool {
         return count == 0

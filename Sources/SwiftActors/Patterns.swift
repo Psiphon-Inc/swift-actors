@@ -41,11 +41,11 @@ struct AskActorParam {
     let receiver: ActorRef
 }
 
-class AskActor: Actor {
+final class AskActor: Actor {
     typealias ParamType = AskActorParam
 
     var context: ActorContext!
-    let params: AskActorParam
+    private let params: AskActorParam
 
     lazy var receive = behavior { [unowned self] in
         defer {

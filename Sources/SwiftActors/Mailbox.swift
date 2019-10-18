@@ -26,11 +26,11 @@ protocol MailboxOwner: class {
 
 final class Mailbox<T> {
 
-    weak var owner: MailboxOwner?
-    let mailboxDispatch: PriorityDispatch
-    var queue: Queue<T>
-    var stopped: Bool
-    var suspendCount = 0
+    private weak var owner: MailboxOwner?
+    private let mailboxDispatch: PriorityDispatch
+    private var queue: Queue<T>
+    internal var stopped: Bool // TODO: make access control private
+    private var suspendCount = 0
 
     init(label: String, qos: DispatchQoS.QoSClass) {
         mailboxDispatch = PriorityDispatch(label: "\(label)$mailbox", qos: qos)
