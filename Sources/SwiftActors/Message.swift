@@ -21,6 +21,17 @@ import Foundation
 
 public protocol AnyMessage {}
 
+public extension AnyMessage {
+    static func be(_ action: @escaping (Self) -> ActionResult) -> Behavior {
+        behavior { (msg: AnyMessage) -> ActionResult in
+            guard let msg = msg as? Self else {
+                return .unhandled
+            }
+            return action(msg)
+        }
+    }
+}
+
 public enum SystemMessage: AnyMessage {
 
     /// Poison Pill message is like a regular message, but stops the actor immediately when it is processed.
@@ -39,4 +50,3 @@ public enum NotificationMessage: AnyMessage {
 extension String: AnyMessage {}
 
 extension Int: AnyMessage {}
-
