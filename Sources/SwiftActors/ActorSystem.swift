@@ -28,11 +28,15 @@ public class RootActor: Actor {
 
     public required init(_ param: Void) {}
 
-    public lazy var receive = behavior { [unowned self] msg -> Receive in
-        return .same
+    public lazy var receive = behavior { [unowned self] msg -> ActionResult in
+        return .unhandled
     }
 
     func stop(inGroup: DispatchGroup) {
+        // No-op if stop has aleady been called.
+        guard case .none = stopGroup else {
+            return
+        }
         stopGroup = inGroup
         stopGroup?.enter()
         stop()
@@ -76,9 +80,11 @@ public class ActorSystem: ActorRefFactory {
 
     /// Stop blocks until all actors in the sytem have stopped.
     public func stop() {
-        let stopGroup = DispatchGroup()
-        root.stop(inGroup: stopGroup)
-        stopGroup.wait()
+        dispatch.sync {
+            let stopGroup = DispatchGroup()
+            root.stop(inGroup: stopGroup)
+            stopGroup.wait()
+        }
     }
 
     public func newActorUID() -> UInt32 {
