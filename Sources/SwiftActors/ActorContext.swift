@@ -322,15 +322,11 @@ extension LocalActorContext: MailboxOwner {
 
             case .user(let message):
                 do {
-                    switch try behavior(.unhandled(message)) {
-                    case .new(let newBehavior):
-                        self.behavior = newBehavior
-                    case .same:
-                        break
-                    case .stop:
-                        self.stop()
-                    case .unhandled:
+                    switch try behavior(.unhandled(message, .none)) {
+                    case .unhandled(_, _):
                         try self.unhandled()
+                    case .handled(_, let behavior):
+                        self.behavior = behavior
                     }
                 } catch ActorErrors.unhandled(let message){
                     // TODO Log these with a logger from root actor.

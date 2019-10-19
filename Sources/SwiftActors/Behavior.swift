@@ -19,25 +19,52 @@
 
 import Foundation
 
+precedencegroup BehaviorCompositionPrecedence {
+    associativity: right
+    higherThan: AssignmentPrecedence
+}
+
+infix operator <| : BehaviorCompositionPrecedence
+
 public enum Receive {
-    case unhandled(AnyMessage)
-    case new(Behavior)
+    case unhandled(AnyMessage, Behavior?)
+    case handled(AnyMessage, Behavior)
+    
+    static func from(_ a: ActionResult, forMessage msg: AnyMessage, givenBehavior: @escaping Behavior) -> Self {
+        switch a {
+        case .unhandled:
+            return .unhandled(msg, givenBehavior)
+        case .same:
+            return .handled(msg, givenBehavior)
+        case .new(let behavior):
+            return .handled(msg, behavior)
+        }
+    }
+}
+
+public enum ActionResult {
+    case unhandled
     case same
-    case stop
+    case new(Behavior)
 }
 
 public typealias Behavior = (Receive) throws -> Receive
 
-public func behavior(_ processor: @escaping (AnyMessage) throws -> Receive) -> Behavior {
+public func behavior(_ action: @escaping (AnyMessage) throws -> ActionResult) -> Behavior {
     return { r -> Receive in
-        if case let .unhandled(msg) = r {
-            return try processor(msg)
+        switch r {
+        case .unhandled(let msg, let b):
+            let actionResult = try action(msg)
+            let r2 = Receive.from(actionResult,
+                                  forMessage: msg,
+                                  givenBehavior: behavior(action))
+            return r2 <| b
+
+        case .handled(let msg, let b):
+            return .handled(msg, behavior(action) <| b)
         }
-        return r
     }
 }
-
-infix operator <| :TernaryPrecedence
 
 /// Pipeline operator for composing `Behavior`s.
 /// - Note: `<|` is right associative.
@@ -45,3 +72,15 @@ public func <| (lhs: @escaping Behavior, rhs: @escaping Behavior) -> Behavior {
     return { try lhs(try rhs($0)) }
 }
 
+fileprivate func <| (lhs: Receive, rhs: Behavior?) -> Receive {
+    guard let rhs = rhs else {
+        return lhs
+    }
+
+    switch lhs {
+    case .unhandled(let msg, let lb):
+        return .unhandled(msg, lb! <| rhs)
+    case .handled(let msg, let lb):
+        return .handled(msg, lb <| rhs)
+    }
+}

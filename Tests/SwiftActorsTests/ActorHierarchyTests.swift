@@ -49,7 +49,7 @@ class ActorHierarchyTests: XCTestCase {
 
             let expects: [XCTestExpectation]
 
-            lazy var receive = behavior { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> ActionResult in
                 if let msg = msg as? String {
                     if msg == "ping" {
                         self.expects[0].fulfill()
@@ -92,7 +92,7 @@ class ActorHierarchyTests: XCTestCase {
             var context: ActorContext!
             let expect: XCTestExpectation
 
-            lazy var receive = behavior { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> ActionResult in
                 guard let msg = msg as? String else {
                     XCTFail()
                     return .same
@@ -123,7 +123,7 @@ class ActorHierarchyTests: XCTestCase {
 
             var context: ActorContext!
 
-            lazy var receive = behavior { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> ActionResult in
                 guard let sender = self.context.sender() else {
                     XCTFail()
                     return .same
@@ -172,7 +172,7 @@ class ActorHierarchyTests: XCTestCase {
                 self.startExpect = param
             }
 
-            lazy var receive = behavior { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> ActionResult in
                 guard let msg = msg as? Message else {
                     XCTFail()
                     return .same
@@ -235,7 +235,7 @@ class ActorHierarchyTests: XCTestCase {
                 self.stopExpect = param[1]
             }
 
-            lazy var receive = behavior { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> ActionResult in
                 guard let msg = msg as? Message else {
                     XCTFail()
                     return .same
@@ -325,13 +325,13 @@ class ActorHierarchyTests: XCTestCase {
 
                         guard let index = firstIndex else {
                             XCTFail()
-                            return .unhandled(msg)
+                            return .unhandled
                         }
 
                         self.expectations[index].fulfill()
                     }
 
-                default: return .unhandled($0)
+                default: return .unhandled
                 }
 
 

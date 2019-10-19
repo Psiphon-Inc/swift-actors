@@ -21,6 +21,8 @@ import XCTest
 import Foundation
 import SwiftActors
 
+extension XCTestExpectation: AnyMessage {}
+
 let echoActorProps = Props(EchoActor.self, param: ())
 
 class EchoActor: Actor {
@@ -32,7 +34,7 @@ class EchoActor: Actor {
 
     var context: ActorContext!
 
-    lazy var receive = behavior { [unowned self] msg -> Receive in
+    lazy var receive = behavior { [unowned self] msg -> ActionResult in
         switch msg {
         case let msg as String:
             self.context.sender()!.tell(message: msg)

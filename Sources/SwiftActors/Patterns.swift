@@ -64,7 +64,8 @@ final class AskActor: Actor {
             self.params.promise.fulfill($0)
         }
 
-        return .stop
+        self.context.stop()
+        return .same
     }
 
     required init(_ param: AskActorParam) {

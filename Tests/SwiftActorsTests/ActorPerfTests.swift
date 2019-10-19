@@ -53,7 +53,7 @@ class ActorPerfTests: XCTestCase {
             let expects: [XCTestExpectation]
             var context: ActorContext!
 
-            lazy var receive = behavior { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> ActionResult in
                 guard let msg = msg as? Int else {
                     XCTFail()
                     return .same
@@ -102,7 +102,7 @@ class ActorPerfTests: XCTestCase {
             var context: ActorContext!
             var count = 0
 
-            lazy var receive = behavior { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> ActionResult in
                 switch msg as! Action {
                 case .reset:
                     self.count = 0

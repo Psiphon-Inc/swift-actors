@@ -50,7 +50,7 @@ class ActorLifecycleTests: XCTestCase {
             var context: ActorContext!
             var expectations: [XCTestExpectation]
 
-            lazy var receive = behavior { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> ActionResult in
 
                 if let i = msg as? Int {
                     self.expectations[i].fulfill()
@@ -91,7 +91,7 @@ class ActorLifecycleTests: XCTestCase {
             var context: ActorContext!
             let expect: XCTestExpectation
 
-            lazy var receive = behavior { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> ActionResult in
                 self.expect.fulfill()
                 return .same
             }
@@ -127,7 +127,7 @@ class ActorLifecycleTests: XCTestCase {
             var preStartValue: String = "notStarted"
             let expect: XCTestExpectation
 
-            lazy var receive = behavior { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> ActionResult in
                 return .same
             }
 
@@ -178,7 +178,7 @@ class ActorLifecycleTests: XCTestCase {
                 preStartExpect = param[1]
             }
 
-            lazy var receive = behavior { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> ActionResult in
                 return .same
             }
 
@@ -246,7 +246,7 @@ class ActorLifecycleTests: XCTestCase {
             var context: ActorContext!
             var counter: Int = 0
 
-            lazy var receive = behavior { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> ActionResult in
                 XCTAssert((self.context as! LocalActorContext<TestActor>).state == .started)
 
                 guard let msg = msg as? Action else {
@@ -260,7 +260,8 @@ class ActorLifecycleTests: XCTestCase {
                 case .shouldNotProcess:
                     XCTFail()
                 case .stop:
-                    return .stop
+                    self.context.stop()
+                    return .same
                 case .contextStop:
                     self.stop()
                 }

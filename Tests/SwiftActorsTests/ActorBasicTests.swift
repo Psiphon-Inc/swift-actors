@@ -20,16 +20,12 @@
 import XCTest
 @testable import SwiftActors
 
-infix operator <|
-
-extension XCTestExpectation: AnyMessage {}
-
 class NoOpActor: Actor {
     typealias ParamType = Void
 
     var context: ActorContext!
 
-    lazy var receive = behavior { [unowned self] msg -> Receive in
+    lazy var receive = behavior { [unowned self] msg -> ActionResult in
         guard let msg = msg as? XCTestExpectation else {
             XCTFail()
             return .same
@@ -99,7 +95,7 @@ final class ActorBasicTests: XCTestCase {
 
             var context: ActorContext!
 
-            lazy var receive = behavior { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> ActionResult in
                 switch msg as! Forwarding {
                 case .forward(to: let noopActor):
                     self.forwardExpect.fulfill()
@@ -153,7 +149,7 @@ final class ActorBasicTests: XCTestCase {
             /// TODO: probably a compiler bug.
             ///       have to explicitly set `behaviorA`'s type to `Behavior`, otherwise will get the message
             ///       "Value of type 'Switcher' has no member 'behaviorA'"
-            lazy var behaviorA: Behavior = behavior { [unowned self] msg -> Receive in
+            lazy var behaviorA: Behavior = behavior { [unowned self] msg -> ActionResult in
 
                 guard let sender = self.context.sender() else {
                     XCTFail()
@@ -175,7 +171,7 @@ final class ActorBasicTests: XCTestCase {
                 }
             }
 
-            lazy var behaviorB = behavior { [unowned self] msg -> Receive in
+            lazy var behaviorB = behavior { [unowned self] msg -> ActionResult in
 
                 guard let sender = self.context.sender() else {
                     XCTFail()
@@ -293,8 +289,8 @@ final class ActorBasicTests: XCTestCase {
 
             var context: ActorContext!
 
-            var receive = behavior {
-                return .unhandled($0)
+            var receive = behavior { _ in
+                return .unhandled
             }
 
             required init(_ param: Void) {}
@@ -353,7 +349,7 @@ final class ActorBasicTests: XCTestCase {
                 self.expect = param
             }
 
-            lazy var receive = behavior { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> ActionResult in
                 guard let msg = msg as? String else {
                     XCTFail()
                     return .same
@@ -400,7 +396,7 @@ final class ActorBasicTests: XCTestCase {
 
             let done: XCTestExpectation
 
-            lazy var receive = behavior { [unowned self] msg -> Receive in
+            lazy var receive = behavior { [unowned self] msg -> ActionResult in
                 switch msg {
                 case is SetTo10:
                     self.result = 10
@@ -430,111 +426,6 @@ final class ActorBasicTests: XCTestCase {
         // Assert
         wait(for: [doneExpectation], timeout: 1)
         XCTAssert((calc as! Calculator).result == 20)
-    }
-
-    func testBehaviorComposition() {
-
-        // Arrange
-        class TestActor: Actor {
-            typealias ParamType = XCTestExpectation
-
-            var context: ActorContext!
-            let doneExpectation: XCTestExpectation
-            var counter: Int = 0
-
-            lazy var set10: Behavior = behavior { [unowned self] msg -> Receive in
-                switch msg {
-                case let msg as String:
-
-                    if msg == "set10" {
-                        self.counter = 10
-                        return .new(self.increment <| self.decrement)
-                    } else {
-                        return .same
-                    }
-
-                default:
-                    XCTFail()
-                }
-                return .unhandled(msg)
-            }
-
-            lazy var increment: Behavior = behavior { [unowned self] msg -> Receive in
-                switch msg {
-                case let msg as String:
-
-                    if msg == "increment" {
-                        self.counter += 1
-
-                        if self.counter == 11 {
-                            return .new(self.done)
-                        } else {
-                            return .new(self.increment <| self.decrement)
-                        }
-                    } else {
-                        return .same
-                    }
-
-                default:
-                    XCTFail()
-                }
-                return .unhandled(msg)
-            }
-
-            lazy var decrement = behavior { [unowned self] msg -> Receive in
-                switch msg {
-                case let msg as String:
-
-                    if msg == "decrement" {
-                        self.counter -= 1
-                        return .new(self.increment)
-                    } else {
-                        return .unhandled(msg)
-                    }
-
-                default:
-                    XCTFail()
-                }
-                return .unhandled(msg)
-            }
-
-            lazy var done = behavior { [unowned self] msg -> Receive in
-                let msg = msg as! String
-                if msg == "done" {
-                    self.doneExpectation.fulfill()
-                    return .same
-                } else {
-                    XCTFail()
-                    return .unhandled(msg)
-                }
-            }
-
-            lazy var receive = self.set10 <| self.decrement
-
-            required init(_ param: ParamType) {
-                self.doneExpectation = param
-            }
-        }
-
-        let expect = expectation(description: "doneExpectation")
-        let testActor = system.spawn(Props(TestActor.self, param: expect),
-                                     name: "testBehaviorComposition")
-
-        // Act
-        testActor ! "set10"      // counter is 10 (accepts next message: "increment", "decrement")
-        testActor ! "decrement"  // counter is 9  (accepts next message: "increment")
-        testActor ! "decrement"  // counter is 9  (message dropped)
-        testActor ! "set10"      // counter is 9  (message dropped)
-        testActor ! "increment"  // counter is 10 (accepts next message: "increment", "decrement")
-        testActor ! "decrement"  // counter is 9  (accepts next message: "increment")
-        testActor ! "decrement"  // counter is 9  (message dropped)
-        testActor ! "increment"  // counter is 10 (accepts next message: "increment", "decrement")
-        testActor ! "increment"  // counter is 11 (accepts next message only: "done")
-        testActor ! "done"       // counter is 11
-
-        // Assert
-        wait(for: [expect], timeout: 1)
-        XCTAssert((testActor as! TestActor).counter == 11)
     }
 
 }
