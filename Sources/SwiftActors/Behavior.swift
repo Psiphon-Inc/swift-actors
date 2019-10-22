@@ -19,68 +19,113 @@
 
 import Foundation
 
-precedencegroup BehaviorCompositionPrecedence {
+precedencegroup BehaviorAdditionPrecedence {
     associativity: right
     higherThan: AssignmentPrecedence
 }
 
-infix operator <| : BehaviorCompositionPrecedence
+precedencegroup BehaviorAlternativePrecedence {
+    associativity: right
+    higherThan: BehaviorAdditionPrecedence
+}
+
+infix operator <> : BehaviorAdditionPrecedence
+infix operator <|> : BehaviorAlternativePrecedence
 
 public enum Receive {
-    case unhandled(AnyMessage, Behavior?)
     case handled(AnyMessage, Behavior)
-    
-    static func from(_ a: ActionResult, forMessage msg: AnyMessage, givenBehavior: @escaping Behavior) -> Self {
-        switch a {
-        case .unhandled:
-            return .unhandled(msg, givenBehavior)
-        case .same:
-            return .handled(msg, givenBehavior)
-        case .new(let behavior):
-            return .handled(msg, behavior)
-        }
-    }
+    case unhandled(AnyMessage, Behavior?)
 }
 
 public enum ActionResult {
     case unhandled
     case same
-    case new(Behavior)
+    case action(ActionHandler)
+    case behavior(Behavior)
 }
 
 public typealias Behavior = (Receive) throws -> Receive
+public typealias ActionHandler = (AnyMessage) throws -> ActionResult
+fileprivate typealias Composition = (@escaping ActionHandler, Receive) throws -> Receive
 
-public func behavior(_ action: @escaping (AnyMessage) throws -> ActionResult) -> Behavior {
+public func behavior(_ action: @escaping ActionHandler) -> Behavior {
+    return lift(action, applyAlternative)
+}
+
+fileprivate func lift(_ action: @escaping ActionHandler, _ compose: @escaping Composition) -> Behavior {
     return { r -> Receive in
-        switch r {
-        case .unhandled(let msg, let b):
-            let actionResult = try action(msg)
-            let r2 = Receive.from(actionResult,
-                                  forMessage: msg,
-                                  givenBehavior: behavior(action))
-            return r2 <| b
+        return try compose(action, r)
+    }
+}
 
-        case .handled(let msg, let b):
-            return .handled(msg, behavior(action) <| b)
+public func <|> (lhs: @escaping Behavior, rhs: Behavior? = .none) -> Behavior {
+    return { r -> Receive in
+        if let rhs = rhs {
+            return try lhs(try rhs(r))
+        } else {
+            return try lhs(r)
         }
     }
 }
 
-/// Pipeline operator for composing `Behavior`s.
-/// - Note: `<|` is right associative.
-public func <| (lhs: @escaping Behavior, rhs: @escaping Behavior) -> Behavior {
-    return { try lhs(try rhs($0)) }
+// MARK: <> "append"
+
+fileprivate func applyAppend(action: @escaping ActionHandler, to partialResult: Receive) rethrows -> Receive {
+    switch partialResult {
+    case .unhandled(let msg, let b):
+
+        switch try action(msg) {
+        case .unhandled:
+            return .unhandled(msg, action <> b)
+        case .same:
+            return .handled(msg, action <> b)
+        case .action(let newAction):
+            return .handled(msg, newAction <> b)
+        case .behavior(let newBehavior):
+            return .handled(msg, newBehavior <|> b!)
+        }
+
+    case .handled(let msg, let b):
+        return .handled(msg, action <> b)
+    }
 }
 
-fileprivate func <| (lhs: Receive, rhs: Behavior?) -> Receive {
-    guard let rhs = rhs else {
-        return lhs
-    }
+public func <> (lhs: @escaping ActionHandler, rhs: @escaping ActionHandler) -> Behavior {
+    return lhs <> lift(rhs, applyAppend)
+}
 
-    switch lhs {
-    case .unhandled(let msg, let lb):
-        return .unhandled(msg, lb! <| rhs)
-    case .handled(let msg, let lb):
-        return .handled(msg, lb <| rhs)
-    }
+public func <> (lhs: @escaping ActionHandler, rhs: Behavior? = .none) -> Behavior {
+    return lift(lhs, applyAppend) <|> rhs
+}
+
+// MARK: <|> "alternative"
+
+fileprivate func applyAlternative(action: @escaping ActionHandler, to partialResult: Receive)
+    rethrows -> Receive {
+
+        switch partialResult {
+        case .unhandled(let msg, _):
+
+            switch try action(msg) {
+            case .unhandled:
+                return .unhandled(msg, .none)
+            case .same:
+                return .handled(msg, action <|> .none)
+            case .action(let newAction):
+                return .handled(msg, newAction <|> .none)
+            case .behavior(let newBehavior):
+                return .handled(msg, newBehavior)
+            }
+
+        case .handled(let msg, let b):
+            return .handled(msg, b)
+        }
+}
+
+public func <|> (lhs: @escaping ActionHandler, rhs: @escaping ActionHandler) -> Behavior {
+    return lhs <|> lift(rhs, applyAlternative)
+}
+
+public func <|> (lhs: @escaping ActionHandler, rhs: Behavior? = .none) -> Behavior {
+    return lift(lhs, applyAlternative) <|> rhs
 }

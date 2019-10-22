@@ -45,13 +45,13 @@ class BehaviorCompositionTests: XCTestCase {
             let doneExpectation: XCTestExpectation
             var counter = 0
 
-            lazy var set10: Behavior = behavior { [unowned self] msg -> ActionResult in
+            lazy var set10: ActionHandler = { [unowned self] msg -> ActionResult in
                 switch msg {
                 case let msg as String:
 
                     if msg == "set10" {
                         self.counter = 10
-                        return .new(self.increment <| self.decrement)
+                        return .behavior(self.increment <|> self.decrement)
                     } else {
                         return .same
                     }
@@ -62,7 +62,7 @@ class BehaviorCompositionTests: XCTestCase {
                 return .unhandled
             }
 
-            lazy var increment: Behavior = behavior { [unowned self] msg -> ActionResult in
+            lazy var increment: ActionHandler = { [unowned self] msg -> ActionResult in
                 switch msg {
                 case let msg as String:
 
@@ -70,9 +70,9 @@ class BehaviorCompositionTests: XCTestCase {
                         self.counter += 1
 
                         if self.counter == 11 {
-                            return .new(self.done)
+                            return .action(self.done)
                         } else {
-                            return .new(self.increment <| self.decrement)
+                            return .behavior(self.increment <|> self.decrement)
                         }
                     } else {
                         return .same
@@ -84,13 +84,13 @@ class BehaviorCompositionTests: XCTestCase {
                 return .unhandled
             }
 
-            lazy var decrement = behavior { [unowned self] msg -> ActionResult in
+            lazy var decrement: ActionHandler = { [unowned self] msg -> ActionResult in
                 switch msg {
                 case let msg as String:
 
                     if msg == "decrement" {
                         self.counter -= 1
-                        return .new(self.increment)
+                        return .action(self.increment)
                     } else {
                         return .unhandled
                     }
@@ -101,7 +101,7 @@ class BehaviorCompositionTests: XCTestCase {
                 return .unhandled
             }
 
-            lazy var done = behavior { [unowned self] msg -> ActionResult in
+            lazy var done: ActionHandler = { [unowned self] msg -> ActionResult in
                 let msg = msg as! String
                 if msg == "done" {
                     self.doneExpectation.fulfill()
@@ -112,7 +112,7 @@ class BehaviorCompositionTests: XCTestCase {
                 }
             }
 
-            lazy var receive = self.set10 <| self.decrement
+            lazy var receive = self.set10 <|> self.decrement
 
             required init(_ param: XCTestExpectation) {
                 self.doneExpectation = param
@@ -140,8 +140,10 @@ class BehaviorCompositionTests: XCTestCase {
         XCTAssert((testActor as! TestActor).counter == 11)
     }
 
+    // MARK: Associativity
+
     /// Tests right associativity of behavior composition.
-    func testAssociativity() {
+    func testAssociativityComposePlus() {
 
         // Arrange
         class AssocActor: Actor {
@@ -150,24 +152,24 @@ class BehaviorCompositionTests: XCTestCase {
             let expect: XCTestExpectation
 
             // Appends to messages if A, otherwise drops the message.
-            lazy var behaviorA = ABCAction.be { [unowned self] _ in
+            lazy var actionA = ABCAction.handler { [unowned self] _ in
                 self.result.append(.A)
                 return .same
             }
 
             // Appends to messages if B, otherwise drops the message.
-            lazy var behaviorB = ABCAction.be { [unowned self] _ in
+            lazy var actionB = ABCAction.handler { [unowned self] _ in
                 self.result.append(.B)
                 return .unhandled
             }
 
             // Appends to messages if C, otherwise drops the message.
-            lazy var behaviorC = ABCAction.be { [unowned self] _ in
+            lazy var actionC = ABCAction.handler { [unowned self] _ in
                 self.result.append(.C)
                 return .unhandled
             }
 
-            lazy var receive = self.behaviorA <| self.behaviorB <| self.behaviorC
+            lazy var receive = self.actionA <> self.actionB <> self.actionC
 
             required init(_ param: XCTestExpectation) {
                 self.expect = param
@@ -196,33 +198,91 @@ class BehaviorCompositionTests: XCTestCase {
         XCTAssert(result == [.C, .B, .A], "got '\(result)'")
     }
 
-
-    /// Tests the condition when a behavior - that is situated in the middle of behavior composition - returns a new behavior after handling a message,
-    /// that was not processed by the behavior above it.
-    func testMiddleBehaviorSwitching() {
+    /// Tests right associativity of behavior composition.
+    func testAssociativityComposeAlternative() {
 
         // Arrange
-
-        /// Initially the actors behavior is `behaviorA <| behaviorB <| behaviorC`
-        /// After receiving message `.B`, the next behavior should be `behaviorA <| newBehaviorB <| behaviorC`
         class AssocActor: Actor {
             var context: ActorContext!
             var result = [ABCAction]()
             let expect: XCTestExpectation
 
             // Appends to messages if A, otherwise drops the message.
-            lazy var behaviorA = ABCAction.be { [unowned self] _ in
+            lazy var actionA = ABCAction.handler { [unowned self] _ in
                 self.result.append(.A)
                 return .same
             }
 
             // Appends to messages if B, otherwise drops the message.
-            lazy var behaviorB = ABCAction.be { [unowned self] in
+            lazy var actionB = ABCAction.handler { [unowned self] _ in
+                self.result.append(.B)
+                return .unhandled
+            }
+
+            // Appends to messages if C, otherwise drops the message.
+            lazy var actionC = ABCAction.handler { [unowned self] _ in
+                self.result.append(.C)
+                return .unhandled
+            }
+
+            lazy var receive = self.actionA <|> self.actionB <|> self.actionC
+
+            required init(_ param: XCTestExpectation) {
+                self.expect = param
+            }
+
+            func postStop() {
+                expect.fulfill()
+            }
+        }
+
+        let expect = expectation(description: "poisoned")
+        let props = Props(AssocActor.self, param: expect)
+        let actor = system.spawn(props, name: "\(#function)Actor")
+
+        // Act
+        actor ! ABCAction.A
+
+        // Assert
+        actor ! .poisonPill
+        wait(for: [expect], timeout: 1)
+
+        let result = (actor as! AssocActor).result
+
+        // If composition was left associative, we would expevect behaviorA to get called first (which returns `.same`)
+        // So the result would have been `[.A]`.
+        XCTAssert(result == [.C, .B, .A], "got '\(result)'")
+    }
+
+    // MARK: MiddleBehaviorSwitching
+
+    /// Tests the condition when a behavior - that is situated in the middle of behavior composition - returns a new behavior after handling a message,
+    /// that was not processed by the behavior above it.
+    func testMiddleBehaviorSwitchingComposePlus() {
+
+        // Arrange
+
+        /// Initially the actors behavior is `behaviorA <> behaviorB <> behaviorC`
+        /// After receiving message `.B`, the next behavior should be `behaviorA <> newBehaviorB <> behaviorC`
+        class AssocActor: Actor {
+            var context: ActorContext!
+            var result = [ABCAction]()
+            let expect: XCTestExpectation
+
+            // Appends to messages if A, otherwise drops the message.
+            lazy var actionA = ABCAction.handler { [unowned self] _ in
+                self.result.append(.A)
+                return .same
+            }
+
+            // Appends to messages if B, otherwise drops the message.
+            lazy var actionB = ABCAction.handler { [unowned self] in
                 self.result.append(.B)
                 switch $0 {
-                case .A, .C: return .unhandled
+                case .A, .C:
+                    return .unhandled
                 case .B:
-                    let newBehaviorB = ABCAction.be { [unowned self] in
+                    let newActionB = ABCAction.handler { [unowned self] in
                         switch $0 {
                         case .B:
                             self.result += [.B, .B, .B]
@@ -232,17 +292,17 @@ class BehaviorCompositionTests: XCTestCase {
                         }
                     }
 
-                    return .new(newBehaviorB)
+                    return .action(newActionB)
                 }
             }
 
             // Appends to messages if C, otherwise drops the message.
-            lazy var behaviorC = ABCAction.be { [unowned self] _ in
+            lazy var behaviorC = ABCAction.handler { [unowned self] _ in
                 self.result.append(.C)
                 return .unhandled
             }
 
-            lazy var receive = self.behaviorA <| self.behaviorB <| self.behaviorC
+            lazy var receive = self.actionA <> self.actionB <> self.behaviorC
 
             required init(_ param: XCTestExpectation) {
                 self.expect = param
@@ -269,6 +329,84 @@ class BehaviorCompositionTests: XCTestCase {
         let result = (actor as! AssocActor).result
 
         XCTAssert(result == [.C, .B, .C, .B, .B, .B, .C, .A], "got '\(result)'")
+    }
+
+    /// Tests the condition when a behavior - that is situated in the middle of behavior composition - returns a new behavior after handling a message,
+    /// that was not processed by the behavior above it.
+    func testMiddleBehaviorSwitchingComposeAlternative() {
+        // Arrange
+
+        /// Initially the actors behavior is `actionA <|> actionB <|> actionC`
+        /// After receiving message `.B`, the next behavior should be `newActionB `
+        class AssocActor: Actor {
+            var context: ActorContext!
+            var result = [ABCAction]()
+            let expect: XCTestExpectation
+
+            // Appends to messages if A, otherwise drops the message.
+            lazy var actionA = ABCAction.handler { [unowned self] _ in
+                XCTFail()
+                return .unhandled
+            }
+
+            // Appends to messages if B, otherwise drops the message.
+            lazy var actionB = ABCAction.handler { [unowned self] in
+                self.result.append(.B)
+                switch $0 {
+                case .A, .C:
+                    return .unhandled
+                case .B:
+                    let newActionB = ABCAction.handler { [unowned self] in
+                        switch $0 {
+                        case .B:
+                            self.result += [.B, .B, .B]
+                            return .same
+                        case .A, .C:
+                            return .same
+                        }
+                    }
+
+                    return .action(newActionB)
+                }
+            }
+
+            // Appends to messages if C, otherwise drops the message.
+            lazy var actionC = ABCAction.handler { [unowned self] _ in
+                self.result.append(.C)
+                return .unhandled
+            }
+
+            lazy var def = self.actionA <|> self.actionB <|> self.actionC
+            lazy var receive = self.def
+
+            required init(_ param: XCTestExpectation) {
+                self.expect = param
+            }
+
+            func postStop() {
+                expect.fulfill()
+            }
+        }
+
+        let expect = expectation(description: "poisoned")
+        let props = Props(AssocActor.self, param: expect)
+        let actor = system.spawn(props, name: "\(#function)Actor")
+
+        // Act
+        actor ! ABCAction.B  // result should be [.C, .B]
+        actor ! ABCAction.B  // result should be ^ + [.B, .B, .B]
+        actor ! ABCAction.A  // result should be ^ + []
+
+        // Assert
+        actor ! .poisonPill
+        wait(for: [expect], timeout: 1)
+
+        let result = (actor as! AssocActor).result
+
+        // result is if <> composition is used [.C, .B, .C, .B, .B, .B, .C]
+
+        XCTAssert(result == [.C, .B, .B, .B, .B], "got '\(result)'")
+
     }
 
 }

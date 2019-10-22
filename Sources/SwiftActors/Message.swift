@@ -22,8 +22,8 @@ import Foundation
 public protocol AnyMessage {}
 
 public extension AnyMessage {
-    static func be(_ action: @escaping (Self) -> ActionResult) -> Behavior {
-        behavior { (msg: AnyMessage) -> ActionResult in
+    static func handler(_ action: @escaping (Self) -> ActionResult) -> ActionHandler {
+        { (msg: AnyMessage) -> ActionResult in
             guard let msg = msg as? Self else {
                 return .unhandled
             }

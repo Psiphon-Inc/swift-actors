@@ -149,7 +149,7 @@ final class ActorBasicTests: XCTestCase {
             /// TODO: probably a compiler bug.
             ///       have to explicitly set `behaviorA`'s type to `Behavior`, otherwise will get the message
             ///       "Value of type 'Switcher' has no member 'behaviorA'"
-            lazy var behaviorA: Behavior = behavior { [unowned self] msg -> ActionResult in
+            lazy var actionA: ActionHandler = { [unowned self] msg -> ActionResult in
 
                 guard let sender = self.context.sender() else {
                     XCTFail()
@@ -167,11 +167,11 @@ final class ActorBasicTests: XCTestCase {
                     return .same
                 case .behaviorB(let num):
                     sender.tell(message: "A\(num)", from: self)
-                    return .new(self.behaviorB)
+                    return .action(self.actionB)
                 }
             }
 
-            lazy var behaviorB = behavior { [unowned self] msg -> ActionResult in
+            lazy var actionB : ActionHandler = { [unowned self] msg -> ActionResult in
 
                 guard let sender = self.context.sender() else {
                     XCTFail()
@@ -186,14 +186,14 @@ final class ActorBasicTests: XCTestCase {
                 switch msg {
                 case .behaviorA(let num):
                     sender.tell(message: "B\(num)", from: self)
-                    return .new(self.behaviorA)
+                    return .action(self.actionA)
                 case .behaviorB(let num):
                     sender.tell(message: "B\(num)", from: self)
                     return .same
                 }
             }
 
-            lazy var receive = self.behaviorA
+            lazy var receive = behavior(self.actionA)
 
             required init(_ param: Void) {}
         }
