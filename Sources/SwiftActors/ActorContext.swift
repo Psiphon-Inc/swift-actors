@@ -24,11 +24,6 @@ public enum MessageKind {
     case user(message: AnyMessage)
 }
 
-/// Wraps a message sent to an actor with its context.
-struct MessageContext {
-    let message: MessageKind
-}
-
 enum ActorState: Int, Ordinal {
     case spawned = 1
     case started
@@ -59,6 +54,9 @@ public protocol ActorContext: ActorRef, ActorRefFactory {
 
     func watch(_ child: ActorRef)
 
+    func stash()
+
+    func unstashAll()
 }
 
 extension ActorContext {
@@ -95,6 +93,12 @@ public protocol ActorTypedContext: ActorLifecycleContext {
 
 public final class LocalActorContext<ActorType: Actor>: ActorTypedContext {
 
+    /// Wraps a message sent to an actor with its context.
+    struct MessageContext {
+        let message: MessageKind
+        var stashed: Bool = false
+    }
+
     public let path: String
     public let name: String
     public unowned var system: ActorSystem
@@ -127,6 +131,9 @@ public final class LocalActorContext<ActorType: Actor>: ActorTypedContext {
     // LocalActorContext specific fields
     private var childrenContexts = [String: ActorLifecycleContext]()
     private var parentContext: ActorLifecycleContext?
+
+    // Stash
+    lazy var stashQueue = Queue<MessageContext>()
 
     public required init(name: String, system: ActorSystem, actor: ActorType,
                          parent: ActorLifecycleContext?, qos: DispatchQoS.QoSClass = .default) {
@@ -277,6 +284,26 @@ public final class LocalActorContext<ActorType: Actor>: ActorTypedContext {
         }
     }
 
+
+    public func stash() {
+        guard let msgCtx = currentMessage else {
+            fatalError("current message context is not set")
+        }
+
+        guard msgCtx.stashed == false else {
+            fatalError("message is already stashed")
+        }
+
+        stashQueue.enqueue(msgCtx)
+        self.currentMessage!.stashed = true
+    }
+
+    public func unstashAll() {
+        while let msgCtx = stashQueue.dequeue() {
+            self.tell(message: msgCtx.message)
+        }
+    }
+
 }
 
 extension LocalActorContext: MailboxOwner {
@@ -297,9 +324,6 @@ extension LocalActorContext: MailboxOwner {
             }
 
             self.currentMessage = msgContext  // Set the new context
-            defer {
-                self.currentMessage = nil
-            }
 
             switch msgContext.message {
             case .system(let sysMessage):

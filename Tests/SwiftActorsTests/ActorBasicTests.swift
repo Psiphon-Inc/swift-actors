@@ -417,5 +417,66 @@ final class ActorBasicTests: XCTestCase {
         XCTAssert((calc as! Calculator).result == 20)
     }
 
+    func testStash() {
+        // Arrange
+        class StashActor: Actor {
+            typealias ParamType = XCTestExpectation
+
+            var context: ActorContext!
+            let done: XCTestExpectation
+            var counter = 0
+
+            var round1 = [String]()
+            var round2 = [String]()
+
+            lazy var receive = behavior { [unowned self] msg -> ActionResult in
+                guard let msg = msg as? String else {
+                    return .unhandled
+                }
+
+                switch (self.counter, msg) {
+                case (0...4, _):
+                    self.context.stash()
+                    self.round1.append(msg)
+
+                case (5, "sentinel"):
+                    self.context.unstashAll()
+
+                case (6...10, _):
+                    self.round2.append(msg)
+
+                default: break
+                }
+
+                if self.counter == 10 {
+                    XCTAssertEqual(self.round1, self.round2)
+                    self.done.fulfill()
+                }
+
+                self.counter += 1
+
+                return .same
+            }
+
+            required init(_ param: ParamType) {
+                self.done = param
+            }
+        }
+
+        // Act
+        let doneExpectation = expectation(description: "done")
+        let actor = system.spawn(Props(StashActor.self, param: doneExpectation), name: #function)
+
+        actor ! "1"
+        actor ! "2"
+        actor ! "3"
+        actor ! "4"
+        actor ! "5"
+        actor ! "sentinel"
+
+        // Assert
+        wait(for: [doneExpectation], timeout: 1)
+    }
+
 }
 
