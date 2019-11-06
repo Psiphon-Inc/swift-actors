@@ -137,8 +137,8 @@ final class ActorBasicTests: XCTestCase {
                              expectation(description: "B5")]
 
         enum SwitchAction: AnyMessage {
-            case behaviorA(Int)
-            case behaviorB(Int)
+            case behaviorA(Int, sender: ActorRef)
+            case behaviorB(Int, sender: ActorRef)
         }
 
         class Switcher: Actor {
@@ -150,45 +150,34 @@ final class ActorBasicTests: XCTestCase {
             ///       have to explicitly set `behaviorA`'s type to `Behavior`, otherwise will get the message
             ///       "Value of type 'Switcher' has no member 'behaviorA'"
             lazy var actionA: ActionHandler = { [unowned self] msg -> ActionResult in
-
-                guard let sender = self.context.sender() else {
-                    XCTFail()
-                    return .same
-                }
-
                 guard let msg = msg as? SwitchAction else {
                     XCTFail()
                     return .same
                 }
 
                 switch msg {
-                case .behaviorA(let num):
-                    sender.tell(message: "A\(num)", from: self)
+                case .behaviorA(let num, let sender):
+                    sender.tell(message: "A\(num)")
                     return .same
-                case .behaviorB(let num):
-                    sender.tell(message: "A\(num)", from: self)
+                case .behaviorB(let num, let sender):
+                    sender.tell(message: "A\(num)")
                     return .action(self.actionB)
                 }
             }
 
             lazy var actionB : ActionHandler = { [unowned self] msg -> ActionResult in
 
-                guard let sender = self.context.sender() else {
-                    XCTFail()
-                    return .same
-                }
-
                 guard let msg = msg as? SwitchAction else {
                     XCTFail()
                     return .same
                 }
 
                 switch msg {
-                case .behaviorA(let num):
-                    sender.tell(message: "B\(num)", from: self)
+                case .behaviorA(let num, let sender):
+                    sender.tell(message: "B\(num)")
                     return .action(self.actionA)
-                case .behaviorB(let num):
-                    sender.tell(message: "B\(num)", from: self)
+                case .behaviorB(let num, let sender):
+                    sender.tell(message: "B\(num)")
                     return .same
                 }
             }
@@ -243,11 +232,11 @@ final class ActorBasicTests: XCTestCase {
 
             func preStart() {
                 // starting behavior for switch is  is `behaviorA`
-                switcher.tell(message: SwitchAction.behaviorA(1), from: self) // should respond A1
-                switcher.tell(message: SwitchAction.behaviorB(2), from: self) // should respond A2
-                switcher.tell(message: SwitchAction.behaviorA(3), from: self) // should respond B3
-                switcher.tell(message: SwitchAction.behaviorB(4), from: self) // should respond A4
-                switcher.tell(message: SwitchAction.behaviorB(5), from: self) // should respond B5
+                switcher.tell(message: SwitchAction.behaviorA(1, sender: self)) // should respond A1
+                switcher.tell(message: SwitchAction.behaviorB(2, sender: self)) // should respond A2
+                switcher.tell(message: SwitchAction.behaviorA(3, sender: self)) // should respond B3
+                switcher.tell(message: SwitchAction.behaviorB(4, sender: self)) // should respond A4
+                switcher.tell(message: SwitchAction.behaviorB(5, sender: self)) // should respond B5
             }
         }
 
@@ -328,7 +317,7 @@ final class ActorBasicTests: XCTestCase {
 
         // Act
         // Sends `expect` message to `echo`, setting `noop` as the sender.
-        echo ! (expect, noop)
+        echo ! EchoActor.Ping(value: expect, sender: noop)
 
         // Assert
         wait(for: [expect], timeout: 1)
@@ -356,7 +345,7 @@ final class ActorBasicTests: XCTestCase {
                 }
 
                 if msg == "echoChild" {
-                    self.child! ! ("messageToChild", self)
+                    self.child! ! EchoActor.Ping(value: "messageToChild", sender: self)
                 }
                 if msg == "messageToChild" {
                     self.expect.fulfill()

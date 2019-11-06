@@ -46,10 +46,6 @@ public protocol ActorRef: class {
     func tell(message: SystemMessage)
 
     func tell(message: AnyMessage)
-
-    /// Sends a message to actor referenced by self, setting sender to from actor.
-    func tell(message: AnyMessage, from actor: ActorRef)
-
 }
 
 public protocol Actor: ActorRef, ActorRefFactory {
@@ -120,11 +116,6 @@ public extension Actor {
         context.tell(message: message)
     }
 
-    /// Sends a message to actor referenced by self, setting sender to from actor.
-    func tell(message: AnyMessage, from actor: ActorRef) {
-        context.tell(message: message, from: actor)
-    }
-
     @discardableResult
     func spawn<T>(_ props: Props<T>, name: String) -> ActorRef where T: Actor {
         return context.spawn(props, name: name)
@@ -140,8 +131,3 @@ public func ! (lhs: ActorRef, rhs: AnyMessage) {
 public func ! (lhs: ActorRef, rhs: SystemMessage) {
     lhs.tell(message: rhs)
 }
-
-public func ! (lhs: ActorRef, rhs: (message: AnyMessage, sender: ActorRef)) {
-    lhs.tell(message: rhs.message, from: rhs.sender)
-}
-

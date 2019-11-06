@@ -27,7 +27,6 @@ public enum MessageKind {
 /// Wraps a message sent to an actor with its context.
 struct MessageContext {
     let message: MessageKind
-    let sender: ActorRef?
 }
 
 enum ActorState: Int, Ordinal {
@@ -49,11 +48,9 @@ public protocol ActorContext: ActorRef, ActorRefFactory {
 
     var system: ActorSystem { get }
 
-    func sender() -> ActorRef?
-
     func stop()
 
-    func tell(message: MessageKind, from actor: ActorRef?)
+    func tell(message: MessageKind)
 
     @discardableResult
     func spawn<T>(_ props: Props<T>, name: String) -> ActorRef where T: Actor
@@ -67,15 +64,11 @@ public protocol ActorContext: ActorRef, ActorRefFactory {
 extension ActorContext {
 
     public func tell(message: AnyMessage) {
-        tell(message: .user(message: message), from: nil)
+        tell(message: .user(message: message))
     }
 
     public func tell(message: SystemMessage) {
-        tell(message: .system(message: message), from: nil)
-    }
-
-    public func tell(message: AnyMessage, from actor: ActorRef) {
-        tell(message: .user(message: message), from: actor)
+        tell(message: .system(message: message))
     }
 
 }
@@ -156,10 +149,6 @@ public final class LocalActorContext<ActorType: Actor>: ActorTypedContext {
         /// Mailbox has the same QoS as the actor.
         mailbox = Mailbox(label: name, qos: qos)
 
-    }
-
-    public func sender() -> ActorRef? {
-        return currentMessage?.sender
     }
 
     public func start() {
@@ -246,8 +235,8 @@ public final class LocalActorContext<ActorType: Actor>: ActorTypedContext {
             "message '\(String(describing: currentMessage!.message))' is not handled by '\(name)'")
     }
 
-    public func tell(message: MessageKind, from actor: ActorRef?) {
-        let msgContext = MessageContext(message: message, sender: actor)
+    public func tell(message: MessageKind) {
+        let msgContext = MessageContext(message: message)
         mailbox.enqueue(msgContext)
     }
 

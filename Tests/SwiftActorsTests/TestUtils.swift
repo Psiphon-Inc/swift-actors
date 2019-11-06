@@ -29,26 +29,37 @@ class EchoActor: Actor {
     typealias ParamType = Void
 
     enum Action: AnyMessage {
-        case respondWithDelay(interval: TimeInterval, value: Int)
+        case respondWithDelay(interval: TimeInterval, value: Int, sender: ActorRef)
+    }
+
+    struct Ping: AnyMessage {
+        let value: AnyMessage
+        let sender: ActorRef
     }
 
     var context: ActorContext!
 
     lazy var receive = behavior { [unowned self] msg -> ActionResult in
         switch msg {
-        case let msg as String:
-            self.context.sender()!.tell(message: msg)
-        case let msg as Int:
-            self.context.sender()!.tell(message: msg + 1)
+        case let msg as Ping:
+            let value = msg.value
+            switch value {
+            case let value as Int:
+                msg.sender ! value + 1
+            default:
+
+                msg.sender ! value
+            }
+
         case let action as Action:
             switch action {
-            case .respondWithDelay(let delay, let value):
+            case .respondWithDelay(let delay, let value, let sender):
                 Thread.sleep(forTimeInterval: delay)
-                self.context.sender()!.tell(message: value + 1)
+                sender ! value + 1
             }
 
         default:
-            self.context.sender()!.tell(message: msg)
+            return .unhandled
         }
 
         return .same
