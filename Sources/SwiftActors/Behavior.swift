@@ -104,13 +104,13 @@ fileprivate func applyAlternative(action: @escaping ActionHandler, to partialRes
     rethrows -> Receive {
 
         switch partialResult {
-        case .unhandled(let msg, _):
+        case .unhandled(let msg, let b):
 
             switch try action(msg) {
             case .unhandled:
-                return .unhandled(msg, .none)
+                return .unhandled(msg, action <|> b)
             case .same:
-                return .handled(msg, action <|> .none)
+                return .handled(msg, action <|> b)
             case .action(let newAction):
                 return .handled(msg, newAction <|> .none)
             case .behavior(let newBehavior):
@@ -118,7 +118,7 @@ fileprivate func applyAlternative(action: @escaping ActionHandler, to partialRes
             }
 
         case .handled(let msg, let b):
-            return .handled(msg, b)
+            return .handled(msg, action <|> b)
         }
 }
 
