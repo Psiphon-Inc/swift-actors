@@ -28,6 +28,10 @@ public enum ActorErrors: Error {
     case timeout(message: String)
 }
 
+public struct StoppedActorError: Error {
+    let message: String
+}
+
 public protocol ActorRefFactory {
 
     @discardableResult
@@ -44,6 +48,8 @@ public protocol ActorRef: class {
     var system: ActorSystem { get }
 
     func tell(message: SystemMessage)
+
+    func tell(message: Message)
 
     func tell(message: AnyMessage)
 }
@@ -109,11 +115,15 @@ public extension Actor {
     }
 
     func tell(message: SystemMessage) {
-        context.tell(message: message)
+        context.tell(message: .system(message))
+    }
+
+    func tell(message: Message) {
+        context.tell(message: .message(message))
     }
 
     func tell(message: AnyMessage) {
-        context.tell(message: message)
+        context.tell(message: .anyMessage(message))
     }
 
     @discardableResult
@@ -124,10 +134,14 @@ public extension Actor {
 
 infix operator ! : AssignmentPrecedence
 
-public func ! (lhs: ActorRef, rhs: AnyMessage) {
+public func ! (lhs: ActorRef, rhs: SystemMessage) {
     lhs.tell(message: rhs)
 }
 
-public func ! (lhs: ActorRef, rhs: SystemMessage) {
+public func ! (lhs: ActorRef, rhs: Message) {
+    lhs.tell(message: rhs)
+}
+
+public func ! (lhs: ActorRef, rhs: AnyMessage) {
     lhs.tell(message: rhs)
 }

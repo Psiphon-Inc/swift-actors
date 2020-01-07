@@ -18,12 +18,30 @@
  */
 
 import Foundation
+import Promises
 
-public protocol AnyMessage {}
+/// Base message type.
+/// For any type that conforms to this protocol, it should provide an implementation of the `promise` property
+/// such  that it returns (possibly nil) reference to the embedded promise object.
+public protocol Message {
+    var promise: Promise<Any>? { get }
+}
 
-public extension AnyMessage {
+/// A message type that messages that do not contain `Promsie` objects.
+/// This protocol provides a default implementation of `promise` that always returns `nil`.
+public protocol AnyMessage: Message {}
+
+extension AnyMessage {
+
+    public var promise: Promise<Any>? {
+        return nil
+    }
+
+}
+
+public extension Message {
     static func handler(_ action: @escaping (Self) -> ActionResult) -> ActionHandler {
-        { (msg: AnyMessage) -> ActionResult in
+        { (msg: Message) -> ActionResult in
             guard let msg = msg as? Self else {
                 return .unhandled
             }
@@ -32,10 +50,18 @@ public extension AnyMessage {
     }
 }
 
-public enum SystemMessage: AnyMessage {
-
+public enum SystemMessage: Message {
     /// Poison Pill message is like a regular message, but stops the actor immediately when it is processed.
-    case poisonPill
+    /// If a promise object is passed in, it is fulfilled after actor is stopped (but not necessarily after all of its
+    /// children have stopped).
+    case poisonPill(Promise<()>?)
+
+    public var promise: Promise<Any>? {
+        switch self {
+        case let .poisonPill(promise):
+            return promise?.eraseToAny()
+        }
+    }
 }
 
 public enum NotificationMessage: AnyMessage {

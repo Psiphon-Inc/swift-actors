@@ -33,8 +33,8 @@ infix operator <> : BehaviorAdditionPrecedence
 infix operator <|> : BehaviorAlternativePrecedence
 
 public enum Receive {
-    case handled(AnyMessage, Behavior)
-    case unhandled(AnyMessage, Behavior?)
+    case handled(Message, Behavior)
+    case unhandled(Message, Behavior?)
 }
 
 public enum ActionResult {
@@ -45,7 +45,7 @@ public enum ActionResult {
 }
 
 public typealias Behavior = (Receive) throws -> Receive
-public typealias ActionHandler = (AnyMessage) throws -> ActionResult
+public typealias ActionHandler = (Message) throws -> ActionResult
 fileprivate typealias Composition = (@escaping ActionHandler, Receive) throws -> Receive
 
 public func behavior(_ action: @escaping ActionHandler) -> Behavior {

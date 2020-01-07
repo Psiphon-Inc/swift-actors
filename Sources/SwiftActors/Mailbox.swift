@@ -19,13 +19,14 @@
 
 import Foundation
 
+struct MailBoxStopped: Error {}
+
 protocol MailboxOwner: class {
     var dispatch: PriorityDispatch { get }
     func newMessage()
 }
 
-final class Mailbox<T> {
-
+final class Mailbox<T: Message> {
     private weak var owner: MailboxOwner?
     private let mailboxDispatch: PriorityDispatch
     private var queue: Queue<T>
@@ -48,16 +49,19 @@ final class Mailbox<T> {
     }
 
     /// - Note: Messages are dropped after the mailbox is stopped.
-    func enqueue(_ item: T) {
+    /// - Important: Message promises are rejected.
+    func enqueue(_ message: T) {
         mailboxDispatch.async {
-            precondition(self.suspendCount == 0 || self.suspendCount == 1, "suspend count is \(self.suspendCount)")
+            precondition(self.suspendCount == 0 || self.suspendCount == 1,
+                         "suspend count is \(self.suspendCount)")
 
-            if self.stopped {
-                // TODO: maybe send the message somewhere else.
+            // Rejects message promise if mailbox is stopped.
+            guard !self.stopped else {
+                message.promise?.reject(MailBoxStopped())
                 return
             }
 
-            self.queue.enqueue(item)
+            self.queue.enqueue(message)
 
             // If the queue count is exactly 1, then resumes the dispatch queue.
             if self.queue.count == 1 && self.suspendCount == 1 {
@@ -67,7 +71,6 @@ final class Mailbox<T> {
         }
     }
 
-    /// - Returns: nil when mailbox is stopped.
     func dequeue() -> T? {
         return mailboxDispatch.syncHighPriority(execute: { () -> T? in
             precondition(self.suspendCount == 0, "suspend count is \(self.suspendCount)")
@@ -103,6 +106,12 @@ final class Mailbox<T> {
     func stop() {
         mailboxDispatch.async {
             self.stopped = true
+
+            // Rejects all messages with promises.
+            while let message = self.queue.dequeue() {
+                message.promise?.reject(MailBoxStopped())
+            }
+
         }
     }
 

@@ -188,7 +188,7 @@ class BehaviorCompositionTests: XCTestCase {
         actor ! ABCAction.A
 
         // Assert
-        actor ! .poisonPill
+        actor ! .poisonPill(nil)
         wait(for: [expect], timeout: 1)
 
         let result = (actor as! AssocActor).result
@@ -244,7 +244,7 @@ class BehaviorCompositionTests: XCTestCase {
         actor ! ABCAction.A
 
         // Assert
-        actor ! .poisonPill
+        actor ! .poisonPill(nil)
         wait(for: [expect], timeout: 1)
 
         let result = (actor as! AssocActor).result
@@ -323,7 +323,7 @@ class BehaviorCompositionTests: XCTestCase {
         actor ! ABCAction.A  // result should be ^ + [.C, .A]
 
         // Assert
-        actor ! .poisonPill
+        actor ! .poisonPill(nil)
         wait(for: [expect], timeout: 1)
 
         let result = (actor as! AssocActor).result
@@ -398,7 +398,7 @@ class BehaviorCompositionTests: XCTestCase {
         actor ! ABCAction.A  // result should be ^ + []
 
         // Assert
-        actor ! .poisonPill
+        actor ! .poisonPill(nil)
         wait(for: [expect], timeout: 1)
 
         let result = (actor as! AssocActor).result

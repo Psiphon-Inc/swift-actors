@@ -18,11 +18,7 @@
  */
 
 import Foundation
-
-public enum MessageKind {
-    case system(message: SystemMessage)
-    case user(message: AnyMessage)
-}
+import Promises
 
 enum ActorState: Int, Ordinal {
     case spawned = 1
@@ -31,7 +27,24 @@ enum ActorState: Int, Ordinal {
     case stopped
 }
 
-public protocol ActorContext: ActorRef, ActorRefFactory {
+public enum MessageKind: Message {
+    case system(SystemMessage)
+    case message(Message)
+    case anyMessage(AnyMessage)
+
+    public var promise: Promise<Any>? {
+        switch self {
+        case let .system(message):
+            return message.promise
+        case let .message(message):
+            return message.promise
+        case .anyMessage(_):
+            return nil
+        }
+    }
+}
+
+public protocol ActorContext: ActorRefFactory {
 
     var path: String { get }
 
@@ -59,18 +72,6 @@ public protocol ActorContext: ActorRef, ActorRefFactory {
     func unstashAll()
 }
 
-extension ActorContext {
-
-    public func tell(message: AnyMessage) {
-        tell(message: .user(message: message))
-    }
-
-    public func tell(message: SystemMessage) {
-        tell(message: .system(message: message))
-    }
-
-}
-
 public protocol ActorLifecycleContext: ActorContext {
 
     var actorRef: ActorRef? { get }
@@ -91,12 +92,16 @@ public protocol ActorTypedContext: ActorLifecycleContext {
 
 }
 
-public final class LocalActorContext<ActorType: Actor>: ActorTypedContext {
+public final class LocalActorContext<ActorType: Actor> {
 
     /// Wraps a message sent to an actor with its context.
-    struct MessageContext {
+    struct MessageContext: Message {
         let message: MessageKind
         var stashed: Bool = false
+
+        var promise: Promise<Any>? {
+            return message.promise
+        }
     }
 
     public let path: String
@@ -122,6 +127,7 @@ public final class LocalActorContext<ActorType: Actor>: ActorTypedContext {
     internal var state: ActorState
     internal let mailbox: Mailbox<MessageContext>
 
+    private var childCount = 0
     private var actor: ActorType?
     private let waitGroup: DispatchGroup
     private var currentMessage: MessageContext?
@@ -155,23 +161,9 @@ public final class LocalActorContext<ActorType: Actor>: ActorTypedContext {
 
         /// Mailbox has the same QoS as the actor.
         mailbox = Mailbox(label: name, qos: qos)
-
     }
 
-    public func start() {
-        dispatch.asyncHighPriority {
-            precondition(self.state != .started, "actor '\(self.name)' already started")
-            guard self.state == .spawned else {
-                return
-            }
-            self.actor!.preStart()
-            self.state = .started
-
-            self.mailbox.setOwner(self)
-        }
-    }
-
-    public func stop() {
+    private func stop(_ promise: Promise<()>?) {
         dispatch.asyncHighPriority {
 
             // Returns if already stopping.
@@ -198,8 +190,29 @@ public final class LocalActorContext<ActorType: Actor>: ActorTypedContext {
                 self.actor = .none
 
                 self.state = .stopped
+                promise?.fulfill(())
             }
         }
+    }
+}
+
+extension LocalActorContext: ActorTypedContext {
+
+    public func start() {
+        dispatch.asyncHighPriority {
+            precondition(self.state != .started, "actor '\(self.name)' already started")
+            guard self.state == .spawned else {
+                return
+            }
+            self.actor!.preStart()
+            self.state = .started
+
+            self.mailbox.setOwner(self)
+        }
+    }
+
+    public func stop() {
+        stop(nil)
     }
 
     public func stop(child: ActorRef) {
@@ -213,8 +226,9 @@ public final class LocalActorContext<ActorType: Actor>: ActorTypedContext {
     }
 
     public func spawn<T>(_ props: Props<T>, name: String) -> ActorRef where T : Actor {
+        let childId = "\(name)_\(self.childCount)"
         let child = props.cls.init(props.param)
-        let childCtx = LocalActorContext<T>(name: name, system: self.system,
+        let childCtx = LocalActorContext<T>(name: childId, system: self.system,
                                             actor: child, parent: self, qos: props.qos)
         child.bind(context: childCtx)
 
@@ -225,11 +239,13 @@ public final class LocalActorContext<ActorType: Actor>: ActorTypedContext {
                 return
             }
 
+            self.childCount += 1
+
             // Checks if a child actor with the same name already exists before adding it.
             if self.children.keys.contains(name) {
                 preconditionFailure("child actor \(name) is not unique")
             }
-            self.childrenContexts[name] = childCtx
+            self.childrenContexts[childId] = childCtx
 
             childCtx.start()
         }
@@ -259,7 +275,7 @@ public final class LocalActorContext<ActorType: Actor>: ActorTypedContext {
             if let index = watchedChildInd {
                 self.watchGroup.remove(at: index)
 
-                self.tell(message: NotificationMessage.terminated(actor: child))
+                self.tell(message: .anyMessage(NotificationMessage.terminated(actor: child)))
             }
 
             if self.state == .stopping {
@@ -329,11 +345,11 @@ extension LocalActorContext: MailboxOwner {
             case .system(let sysMessage):
 
                 switch sysMessage {
-                case .poisonPill:
-                    self.stop()
+                case .poisonPill(let promise):
+                    self.stop(promise)
                 }
 
-            case .user(let message):
+            case .message(let message), .anyMessage(let message as Message):
                 do {
                     switch try behavior(.unhandled(message, .none)) {
                     case .unhandled(_, _):
