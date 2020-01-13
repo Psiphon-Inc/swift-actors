@@ -50,8 +50,6 @@ public protocol ActorContext: ActorRefFactory {
 
     var name: String { get }
 
-    var parent: ActorRef? { get }
-
     var children: [String: ActorRef] { get }
 
     var system: ActorSystem { get }
@@ -112,10 +110,6 @@ public final class LocalActorContext<ActorType: Actor> {
         return actor
     }
 
-    public unowned var parent: ActorRef? {
-        return parentContext?.actorRef
-    }
-
     public var children: [String: ActorRef] {
         return childrenContexts.mapValues {
             return $0.actorRef!
@@ -134,8 +128,9 @@ public final class LocalActorContext<ActorType: Actor> {
     private var behavior: Behavior!
     private var watchGroup: [ActorRef] = []
 
-    // LocalActorContext specific fields
     private var childrenContexts = [String: ActorLifecycleContext]()
+
+    // Used internally only.
     private var parentContext: ActorLifecycleContext?
 
     // Stash

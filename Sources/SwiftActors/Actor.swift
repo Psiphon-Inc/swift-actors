@@ -106,10 +106,6 @@ public extension Actor {
         return context.system
     }
 
-    func parent() -> ActorRef? {
-        return context.parent
-    }
-
     func stop() {
         context.stop()
     }
