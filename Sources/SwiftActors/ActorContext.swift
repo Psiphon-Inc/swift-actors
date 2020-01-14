@@ -122,6 +122,10 @@ public final class LocalActorContext<ActorType: Actor> {
     internal let mailbox: Mailbox<MessageContext>
 
     private var childCount = 0
+
+    /// A strong reference is held to the actor, and Actor type in turn holds a
+    /// strong refrence to the context.
+    /// - Note: This reference cycle needs to be broken when the actor is stopped.
     private var actor: ActorType?
     private let waitGroup: DispatchGroup
     private var currentMessage: MessageContext?
@@ -182,7 +186,9 @@ public final class LocalActorContext<ActorType: Actor> {
                 }
                 self.actor!.postStop()
                 self.parentContext?.childStopped(self.actor!)
-                self.actor = .none
+
+                // Breaks reference cycle between `Actor` and `ActorContext`.
+                self.actor = nil
 
                 self.state = .stopped
                 promise?.fulfill(())
